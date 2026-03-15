@@ -3,34 +3,32 @@ import { Link } from 'react-router-dom'; // Import Link for navigation
 
 export default function Home() {
   return (
-    <div>
-      <section className="hero">
-        <p style={{color:'#82CD47', fontWeight:'bold'}}>ECO-FRIENDLY • SUSTAINABLE</p>
-        <h1>Sustainable Living Starts with <span>Coconut Coir.</span></h1>
-        
-        {/* Updated Button to Link to /products */}
-        <Link to="/products">
-          <button className="btn">Shop Collection</button>
-        </Link>
-      </section>
-      
-      <div style={{textAlign:'center', padding:'50px 20px'}}>
-        <h2>Why Choose Us?</h2>
-        <div className="product-grid">
-          <div className="product-card">
-            <h3>🌿 100% Natural</h3>
-            <p>Directly from farms</p>
-          </div>
-          <div className="product-card">
-            <h3>💪 Durable</h3>
-            <p>Built to last years</p>
-          </div>
-          <div className="product-card">
-            <h3>🌍 Zero Waste</h3>
-            <p>Completely biodegradable</p>
-          </div>
+    <div className="max-w-7xl mx-auto px-8 py-16">
+
+      <p className="text-green-600 font-semibold tracking-wide">
+        ECO-FRIENDLY • SUSTAINABLE
+      </p>
+
+      <h1 className="text-5xl font-bold mt-4 max-w-2xl">
+        Sustainable Living Starts with Coconut Coir.
+      </h1>
+
+      <button className="mt-6 bg-black text-white px-6 py-3 rounded-xl">
+        Shop Collection
+      </button>
+
+      <div className="mt-20 text-center">
+        <h2 className="text-xl font-bold mb-4">
+          Why Choose Us?
+        </h2>
+
+        <div className="space-y-4">
+          <p>🌿 100% Natural — Directly from farms</p>
+          <p>💪 Durable — Built to last years</p>
+          <p>🌎 Zero Waste — Completely biodegradable</p>
         </div>
       </div>
+
     </div>
   );
 }
