@@ -1,13 +1,13 @@
 "use client";
 import dynamic from "next/dynamic";
 
-const InventoryClient = dynamic(() => import("./InventoryClient"), {
+const OrdersClient = dynamic(() => import("./OrdersClient"), {
   ssr: false,
   loading: () => <Loader />,
 });
 
 export default function Page() {
-  return <InventoryClient />;
+  return <OrdersClient />;
 }
 
 function Loader() {

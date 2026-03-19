@@ -3,52 +3,195 @@ import { useApp } from "@/context/AppContext";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
+import { User, MapPin, Phone, Mail, Lock, Camera, ShoppingBag, Heart, LogOut, Eye, EyeOff } from "lucide-react";
+import Link from "next/link";
 
 export default function ProfilePage() {
-  const { user, setUser } = useApp();
-  const router = useRouter();
+  const { user, setUser, transactions, wishlist } = useApp();
+  const router  = useRouter();
+  const fileRef = useRef();
 
-  useEffect(() => { if (!user) router.push("/login"); }, [user]);
+  const [tab,     setTab]     = useState("info");
+  const [editing, setEditing] = useState(false);
+  const [saved,   setSaved]   = useState(false);
+  const [form,    setForm]    = useState({ name:"", address:"", mobile:"", email:"" });
+  const [pwForm,  setPwForm]  = useState({ current:"", newPw:"", confirm:"" });
+  const [pwMsg,   setPwMsg]   = useState({ text:"", ok:false });
+  const [showPw,  setShowPw]  = useState(false);
+
+  useEffect(() => {
+    if (!user) { router.push("/login"); return; }
+    setForm({ name: user.name||"", address: user.address||"", mobile: user.mobile||"", email: user.email||"" });
+  }, [user]);
 
   if (!user) return null;
+
+  const initials   = user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0,2);
+  const totalSpent = transactions.reduce((s, t) => s + t.total, 0);
+  const received   = transactions.filter((t) => t.status === "Received").length;
+
+  const handleAvatar = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setUser({ ...user, avatar: reader.result });
+    reader.readAsDataURL(file);
+  };
+
+  const saveProfile = () => {
+    if (!form.name.trim()) return;
+    setUser({ ...user, ...form });
+    setEditing(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  const changePassword = (e) => {
+    e.preventDefault();
+    const stored = localStorage.getItem("cc_accounts");
+    const accounts = stored ? JSON.parse(stored) : [];
+    const idx = accounts.findIndex((a) => a.email === user.email);
+    if (idx === -1) { setPwMsg({ text:"Account not found.", ok:false }); return; }
+    if (accounts[idx].password !== pwForm.current) { setPwMsg({ text:"Current password is incorrect.", ok:false }); return; }
+    if (pwForm.newPw.length < 6) { setPwMsg({ text:"New password must be at least 6 characters.", ok:false }); return; }
+    if (pwForm.newPw !== pwForm.confirm) { setPwMsg({ text:"New passwords do not match.", ok:false }); return; }
+    accounts[idx].password = pwForm.newPw;
+    localStorage.setItem("cc_accounts", JSON.stringify(accounts));
+    setPwMsg({ text:"Password changed successfully!", ok:true });
+    setPwForm({ current:"", newPw:"", confirm:"" });
+  };
+
+  const inp = { width:"100%", border:"2px solid #E8EDE8", borderRadius:14, padding:"13px 18px", fontSize:14, fontFamily:"var(--font-body)", outline:"none", boxSizing:"border-box", background:"#fff" };
 
   return (
     <>
       <Navbar />
-      <main className="min-h-screen bg-[#f9fdf4] py-12 px-4">
-        <div className="max-w-lg mx-auto">
-          <h1 className="text-3xl font-bold text-[#2D5016] mb-8">👤 My Profile</h1>
-          <div className="bg-white rounded-2xl shadow-sm p-8">
-            <div className="flex items-center gap-4 mb-8">
-              <div className="w-16 h-16 bg-[#2D5016] rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                {user.name[0].toUpperCase()}
+      <main style={{ background:"#FFFEF5", minHeight:"100vh", fontFamily:"var(--font-body)", padding:"48px 24px 80px" }}>
+        <div style={{ maxWidth:820, margin:"0 auto" }}>
+
+          {/* Hero card */}
+          <div style={{ background:"linear-gradient(135deg,#1A472A,#0E2011)", borderRadius:28, padding:"36px 44px", marginBottom:24, display:"flex", alignItems:"center", gap:28, flexWrap:"wrap" }}>
+            <div style={{ position:"relative", flexShrink:0 }}>
+              <div style={{ width:88, height:88, borderRadius:"50%", background:"linear-gradient(135deg,#A8FF3E,#5BCC1C)", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", border:"3px solid rgba(168,255,62,0.4)" }}>
+                {user.avatar
+                  ? <img src={user.avatar} alt="avatar" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                  : <span style={{ fontFamily:"var(--font-display)", fontWeight:800, fontSize:28, color:"#0E2011" }}>{initials}</span>}
               </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-800">{user.name}</h2>
-                <p className="text-gray-500 text-sm">{user.email}</p>
-              </div>
+              <button onClick={() => fileRef.current.click()}
+                style={{ position:"absolute", bottom:0, right:0, width:30, height:30, background:"#A8FF3E", border:"none", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
+                <Camera size={14} color="#0E2011" />
+              </button>
+              <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleAvatar} />
             </div>
-            <div className="space-y-4">
-              {[
-                { label: "Full Name", value: user.name },
-                { label: "Email", value: user.email },
-                { label: "Address", value: user.address },
-                { label: "Mobile", value: user.mobile },
-              ].map(({ label, value }) => (
-                <div key={label} className="border-b pb-3">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
-                  <p className="text-gray-800 font-medium">{value}</p>
+            <div style={{ flex:1 }}>
+              <div style={{ fontFamily:"var(--font-display)", color:"#fff", fontWeight:800, fontSize:22, marginBottom:4 }}>{user.name}</div>
+              <div style={{ color:"rgba(255,255,255,0.5)", fontSize:13 }}>{user.email}</div>
+            </div>
+            <div style={{ display:"flex", gap:28, flexWrap:"wrap" }}>
+              {[{ v:transactions.length, l:"Orders" },{ v:`₱${totalSpent.toLocaleString()}`, l:"Spent" },{ v:wishlist.length, l:"Wishlist" },{ v:received, l:"Received" }].map(({ v,l }) => (
+                <div key={l} style={{ textAlign:"center" }}>
+                  <div style={{ fontFamily:"var(--font-display)", color:"#A8FF3E", fontWeight:800, fontSize:20 }}>{v}</div>
+                  <div style={{ color:"rgba(255,255,255,0.45)", fontSize:11 }}>{l}</div>
                 </div>
               ))}
             </div>
-            <button
-              onClick={() => { setUser(null); router.push("/"); }}
-              className="mt-8 w-full border-2 border-red-200 text-red-500 py-3 rounded-xl font-semibold hover:bg-red-50 transition"
-            >
-              Logout
-            </button>
           </div>
+
+          {/* Tabs */}
+          <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+            {[{ id:"info", l:"My Info", icon:User },{ id:"security", l:"Security", icon:Lock },{ id:"stats", l:"Activity", icon:ShoppingBag }].map(({ id, l, icon:Ic }) => (
+              <button key={id} onClick={() => setTab(id)}
+                style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 22px", borderRadius:50, border:"2.5px solid", borderColor:tab===id?"#0E2011":"#E8EDE8", background:tab===id?"#0E2011":"#fff", color:tab===id?"#A8FF3E":"#555", fontFamily:"var(--font-body)", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.2s" }}>
+                <Ic size={15} /> {l}
+              </button>
+            ))}
+          </div>
+
+          {/* My Info */}
+          {tab === "info" && (
+            <div style={{ background:"#fff", borderRadius:24, padding:"32px 36px", boxShadow:"0 4px 20px rgba(14,32,17,0.07)" }} className="animate-fadeSlideUp">
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:28 }}>
+                <h2 style={{ fontFamily:"var(--font-display)", fontSize:20, fontWeight:800, color:"#0E2011", margin:0 }}>Account Information</h2>
+                {!editing
+                  ? <button onClick={() => setEditing(true)} className="tk-btn-dark" style={{ fontSize:13 }}>Edit Profile</button>
+                  : <div style={{ display:"flex", gap:10 }}>
+                      <button onClick={saveProfile} className="tk-btn-cta" style={{ padding:"10px 22px", fontSize:13 }}>Save</button>
+                      <button onClick={() => setEditing(false)} style={{ background:"#fff", border:"2px solid #ddd", borderRadius:50, padding:"10px 22px", fontFamily:"var(--font-body)", fontWeight:700, fontSize:13, cursor:"pointer", color:"#888" }}>Cancel</button>
+                    </div>}
+              </div>
+
+              {saved && <div className="animate-bounceIn" style={{ background:"#E8FFD0", border:"1.5px solid #A8FF3E", borderRadius:12, padding:"12px 18px", marginBottom:20, fontSize:13, color:"#1A7A2E", fontWeight:700 }}>Profile updated!</div>}
+
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
+                {[{ key:"name",l:"Full Name",ro:false },{ key:"email",l:"Email",ro:true },{ key:"mobile",l:"Mobile",ro:false },{ key:"address",l:"Address",ro:false,span:2 }].map(({ key, l, ro, span }) => (
+                  <div key={key} style={{ gridColumn:span===2?"1/-1":"auto" }}>
+                    <label style={{ display:"block", fontSize:12, fontWeight:700, color:"#aaa", textTransform:"uppercase", letterSpacing:1.2, marginBottom:8 }}>{l}</label>
+                    {editing && !ro
+                      ? <input value={form[key]} onChange={(e) => setForm({ ...form, [key]:e.target.value })} style={{ ...inp }}
+                          onFocus={(e)=>e.target.style.borderColor="#A8FF3E"} onBlur={(e)=>e.target.style.borderColor="#E8EDE8"} />
+                      : <div style={{ fontSize:15, color:"#0E2011", fontWeight:600, padding:"13px 0", borderBottom:"1.5px solid #F5F5F0" }}>
+                          {user[key]||"—"} {ro && <span style={{ fontSize:11, color:"#ccc", marginLeft:6 }}>(read-only)</span>}
+                        </div>}
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display:"flex", gap:12, marginTop:28, flexWrap:"wrap" }}>
+                <Link href="/history" style={{ display:"flex", alignItems:"center", gap:8, background:"#F5F9F0", border:"2px solid #E8FFD0", borderRadius:14, padding:"13px 18px", textDecoration:"none", color:"#0E2011", fontWeight:700, fontSize:13 }}>
+                  <ShoppingBag size={16} color="#1A7A2E" /> My Orders
+                </Link>
+                <Link href="/wishlist" style={{ display:"flex", alignItems:"center", gap:8, background:"#FFF0F0", border:"2px solid #FFCDD2", borderRadius:14, padding:"13px 18px", textDecoration:"none", color:"#C62828", fontWeight:700, fontSize:13 }}>
+                  <Heart size={16} /> Wishlist ({wishlist.length})
+                </Link>
+                <button onClick={() => { setUser(null); router.push("/"); }}
+                  style={{ display:"flex", alignItems:"center", gap:8, background:"#FFF0F0", border:"2px solid #FFCDD2", borderRadius:14, padding:"13px 18px", cursor:"pointer", fontFamily:"var(--font-body)", fontWeight:700, fontSize:13, color:"#C62828" }}>
+                  <LogOut size={16} /> Sign Out
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Security */}
+          {tab === "security" && (
+            <div style={{ background:"#fff", borderRadius:24, padding:"32px 36px", boxShadow:"0 4px 20px rgba(14,32,17,0.07)" }} className="animate-fadeSlideUp">
+              <h2 style={{ fontFamily:"var(--font-display)", fontSize:20, fontWeight:800, color:"#0E2011", margin:"0 0 28px" }}>Change Password</h2>
+              {pwMsg.text && <div className="animate-bounceIn" style={{ background:pwMsg.ok?"#E8FFD0":"#FFF0F0", border:`1.5px solid ${pwMsg.ok?"#A8FF3E":"#FFCDD2"}`, borderRadius:12, padding:"12px 18px", marginBottom:22, fontSize:13, color:pwMsg.ok?"#1A7A2E":"#C62828", fontWeight:700 }}>{pwMsg.text}</div>}
+              <form onSubmit={changePassword} style={{ display:"flex", flexDirection:"column", gap:18 }}>
+                {[{ k:"current",l:"Current Password" },{ k:"newPw",l:"New Password" },{ k:"confirm",l:"Confirm New Password" }].map(({ k,l }) => (
+                  <div key={k}>
+                    <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#555", marginBottom:8 }}>{l}</label>
+                    <div style={{ position:"relative" }}>
+                      <input type={showPw?"text":"password"} required value={pwForm[k]} onChange={(e) => setPwForm({ ...pwForm, [k]:e.target.value })}
+                        style={{ ...inp, paddingRight:48 }}
+                        onFocus={(e)=>e.target.style.borderColor="#A8FF3E"} onBlur={(e)=>e.target.style.borderColor="#E8EDE8"} />
+                      <button type="button" onClick={() => setShowPw(!showPw)} style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"#aaa" }}>
+                        {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button type="submit" className="tk-btn-cta" style={{ alignSelf:"flex-start", padding:"13px 32px" }}>Update Password</button>
+              </form>
+            </div>
+          )}
+
+          {/* Activity */}
+          {tab === "stats" && (
+            <div style={{ background:"#fff", borderRadius:24, padding:"32px 36px", boxShadow:"0 4px 20px rgba(14,32,17,0.07)" }} className="animate-fadeSlideUp">
+              <h2 style={{ fontFamily:"var(--font-display)", fontSize:20, fontWeight:800, color:"#0E2011", margin:"0 0 24px" }}>Account Activity</h2>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:16, marginBottom:28 }}>
+                {[{ l:"Total Orders", v:transactions.length, i:"📦", bg:"#E8FFD0" },{ l:"Total Spent", v:`₱${totalSpent.toLocaleString()}`, i:"💰", bg:"#FFF3D9" },{ l:"Orders Received", v:received, i:"✅", bg:"#DBEAFE" },{ l:"Wishlist Items", v:wishlist.length, i:"❤️", bg:"#FFE4E6" }].map(({ l,v,i,bg }) => (
+                  <div key={l} style={{ background:bg, borderRadius:18, padding:"22px 24px" }}>
+                    <div style={{ fontSize:28, marginBottom:8 }}>{i}</div>
+                    <div style={{ fontFamily:"var(--font-display)", fontSize:26, fontWeight:800, color:"#0E2011" }}>{v}</div>
+                    <div style={{ fontSize:12, color:"#666" }}>{l}</div>
+                  </div>
+                ))}
+              </div>
+              <Link href="/history" className="tk-btn-cta" style={{ textDecoration:"none", display:"inline-block" }}>View All Orders →</Link>
+            </div>
+          )}
         </div>
       </main>
       <Footer />

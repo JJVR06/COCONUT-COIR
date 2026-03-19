@@ -4,86 +4,132 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
+import { Eye, EyeOff } from "lucide-react";
+
+const fields = [
+  { key: "name",            label: "Complete Name",    type: "text",     placeholder: "Juan dela Cruz",       span: 2 },
+  { key: "email",           label: "Email Address",    type: "email",    placeholder: "you@email.com",         span: 2 },
+  { key: "address",         label: "Address",          type: "text",     placeholder: "123 Street, City, Province", span: 2 },
+  { key: "mobile",          label: "Mobile Number",    type: "tel",      placeholder: "09XX XXX XXXX",         span: 1 },
+  { key: "password",        label: "Password",         type: "password", placeholder: "Min. 6 characters",     span: 1 },
+  { key: "confirmPassword", label: "Confirm Password", type: "password", placeholder: "Repeat your password",  span: 2 },
+];
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({
-    name: "", email: "", password: "", confirmPassword: "",
-    address: "", mobile: ""
-  });
+  const [form, setForm] = useState({ name:"", email:"", address:"", mobile:"", password:"", confirmPassword:"" });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const getStrength = (pw) => {
+    if (!pw) return 0;
+    let s = 0;
+    if (pw.length >= 6) s++;
+    if (/[A-Z]/.test(pw)) s++;
+    if (/[0-9]/.test(pw)) s++;
+    if (/[^A-Za-z0-9]/.test(pw)) s++;
+    return s;
+  };
+  const strength = getStrength(form.password);
+  const strengthLabel = ["", "Weak", "Fair", "Good", "Strong"][strength];
+  const strengthColor = ["", "#E74C3C", "#FF8C00", "#1A7A2E", "#A8FF3E"][strength];
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (form.password !== form.confirmPassword) {
-      setError("Passwords do not match."); return;
-    }
-    if (form.password.length < 6) {
-      setError("Password must be at least 6 characters."); return;
-    }
-    const stored = localStorage.getItem("cc_accounts");
-    const accounts = stored ? JSON.parse(stored) : [];
-    if (accounts.find((a) => a.email === form.email)) {
-      setError("Email already registered."); return;
-    }
-    const { confirmPassword, ...data } = form;
-    accounts.push(data);
-    localStorage.setItem("cc_accounts", JSON.stringify(accounts));
-    setSuccess(true);
-    setTimeout(() => router.push("/login"), 2000);
+    if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
+    if (form.password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    setLoading(true);
+    setTimeout(() => {
+      const stored = localStorage.getItem("cc_accounts");
+      const accounts = stored ? JSON.parse(stored) : [];
+      if (accounts.find((a) => a.email === form.email)) { setError("Email already registered."); setLoading(false); return; }
+      const { confirmPassword, ...data } = form;
+      accounts.push(data);
+      localStorage.setItem("cc_accounts", JSON.stringify(accounts));
+      setSuccess(true);
+      setTimeout(() => router.push("/login"), 2200);
+    }, 600);
   };
-
-  const fields = [
-    { key: "name", label: "Complete Name", type: "text", placeholder: "Juan dela Cruz" },
-    { key: "email", label: "Email Address", type: "email", placeholder: "you@email.com" },
-    { key: "address", label: "Address", type: "text", placeholder: "123 Street, City, Province" },
-    { key: "mobile", label: "Mobile Number", type: "tel", placeholder: "09XX XXX XXXX" },
-    { key: "password", label: "Password", type: "password", placeholder: "••••••••" },
-    { key: "confirmPassword", label: "Confirm Password", type: "password", placeholder: "••••••••" },
-  ];
 
   return (
     <>
       <Navbar />
-      <main className="min-h-screen bg-[#f9fdf4] flex items-center justify-center py-16 px-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="text-5xl mb-2">🥥</div>
-            <h1 className="text-2xl font-bold text-[#2D5016]">Create Account</h1>
-            <p className="text-gray-500 text-sm">Join the CoirCraft community</p>
-          </div>
-          {success && (
-            <p className="bg-green-50 text-green-700 text-sm p-3 rounded-lg mb-4 text-center">
-              ✅ Account created! Redirecting to login...
-            </p>
-          )}
-          {error && <p className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4">{error}</p>}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {fields.map(({ key, label, type, placeholder }) => (
-              <div key={key}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-                <input
-                  type={type}
-                  required
-                  value={form[key]}
-                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#2D5016]"
-                  placeholder={placeholder}
-                />
+      <main style={{ background: "#FFFEF5", minHeight: "100vh", fontFamily: "var(--font-body)", padding: "64px 16px" }}>
+        <div style={{ position: "fixed", inset: 0, pointerEvents: "none", overflow: "hidden", zIndex: 0 }}>
+          <div style={{ position: "absolute", top: -100, right: -80, width: 500, height: 500, background: "radial-gradient(circle,rgba(168,255,62,0.07) 0%,transparent 70%)", borderRadius: "50%" }} />
+        </div>
+
+        <div style={{ position: "relative", zIndex: 1, maxWidth: 560, margin: "0 auto" }}>
+          <div style={{ background: "#fff", borderRadius: 28, boxShadow: "0 20px 60px rgba(14,32,17,0.12)", padding: "48px 44px" }}>
+
+            {/* Header */}
+            <div style={{ textAlign: "center", marginBottom: 36 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 68, height: 68, background: "linear-gradient(135deg,#A8FF3E,#1A472A)", borderRadius: 20, fontSize: 32, marginBottom: 16, boxShadow: "0 8px 24px rgba(168,255,62,0.35)" }}>🥥</div>
+              <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 800, color: "#0E2011", margin: "0 0 6px" }}>Create Account</h1>
+              <p style={{ color: "#888", fontSize: 14 }}>Join the CoirCraft community today</p>
+            </div>
+
+            {success && (
+              <div style={{ background: "#E8FFD0", border: "1.5px solid #A8FF3E", borderRadius: 14, padding: "14px 18px", marginBottom: 20, fontSize: 13, color: "#1A7A2E", textAlign: "center", fontWeight: 700 }}>
+                ✅ Account created! Redirecting to login...
               </div>
-            ))}
-            <button
-              type="submit"
-              className="w-full bg-[#2D5016] text-white py-3 rounded-xl font-semibold hover:bg-[#1a3009] transition"
-            >
-              Create Account
-            </button>
-          </form>
-          <p className="text-center text-sm text-gray-500 mt-6">
-            Already have an account?{" "}
-            <Link href="/login" className="text-[#2D5016] font-semibold hover:underline">Login</Link>
-          </p>
+            )}
+            {error && (
+              <div style={{ background: "#FFF0F0", border: "1.5px solid #FFCDD2", borderRadius: 12, padding: "12px 16px", marginBottom: 20, fontSize: 13, color: "#C62828" }}>
+                ⚠️ {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+                {fields.map(({ key, label, type, placeholder, span }) => (
+                  <div key={key} style={{ gridColumn: span === 2 ? "1 / -1" : "auto" }}>
+                    <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "#0E2011", marginBottom: 8 }}>{label}</label>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        type={type === "password" && key === "password" ? (showPass ? "text" : "password") : type === "password" ? (showPass ? "text" : "password") : type}
+                        required value={form[key]}
+                        onChange={(e) => { setForm({ ...form, [key]: e.target.value }); setError(""); }}
+                        placeholder={placeholder}
+                        style={{ width: "100%", border: "2px solid #E8EDE8", borderRadius: 14, padding: "13px 18px", fontSize: 14, fontFamily: "var(--font-body)", outline: "none", transition: "border-color 0.2s", boxSizing: "border-box" }}
+                        onFocus={(e) => e.target.style.borderColor = "#A8FF3E"}
+                        onBlur={(e) => e.target.style.borderColor = "#E8EDE8"}
+                      />
+                      {(key === "password" || key === "confirmPassword") && (
+                        <button type="button" onClick={() => setShowPass(!showPass)}
+                          style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#aaa" }}>
+                          {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      )}
+                    </div>
+                    {/* Password strength */}
+                    {key === "password" && form.password && (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                          {[1,2,3,4].map((i) => (
+                            <div key={i} style={{ flex: 1, height: 4, borderRadius: 4, background: i <= strength ? strengthColor : "#E8EDE8", transition: "background 0.3s" }} />
+                          ))}
+                        </div>
+                        <div style={{ fontSize: 11, color: strengthColor, fontWeight: 700 }}>{strengthLabel}</div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <button type="submit" disabled={loading}
+                style={{ width: "100%", background: loading ? "#ccc" : "linear-gradient(135deg,#A8FF3E,#5BCC1C)", color: "#0E2011", border: "none", padding: "15px", borderRadius: 50, fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", boxShadow: loading ? "none" : "0 4px 20px rgba(168,255,62,0.4)", marginTop: 24, transition: "all 0.25s" }}>
+                {loading ? "Creating Account..." : "Create Account →"}
+              </button>
+            </form>
+
+            <div style={{ textAlign: "center", marginTop: 22, fontSize: 13, color: "#888" }}>
+              Already have an account?{" "}
+              <Link href="/login" style={{ color: "#1A7A2E", fontWeight: 700, textDecoration: "none" }}>Sign in here</Link>
+            </div>
+          </div>
         </div>
       </main>
       <Footer />
