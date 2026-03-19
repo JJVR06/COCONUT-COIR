@@ -7,21 +7,28 @@ export function AppProvider({ children }) {
   const [user, setUserState] = useState(null);
   const [cart, setCart] = useState([]);
   const [sellerLoggedIn, setSellerLoggedInState] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Load from localStorage on mount
   useEffect(() => {
-    const u = localStorage.getItem("cc_user");
-    const c = localStorage.getItem("cc_cart");
-    const s = localStorage.getItem("cc_seller");
-    if (u) setUserState(JSON.parse(u));
-    if (c) setCart(JSON.parse(c));
-    if (s) setSellerLoggedInState(JSON.parse(s));
+    setMounted(true);
+    try {
+      const u = localStorage.getItem("cc_user");
+      const c = localStorage.getItem("cc_cart");
+      const s = localStorage.getItem("cc_seller");
+      if (u) setUserState(JSON.parse(u));
+      if (c) setCart(JSON.parse(c));
+      if (s) setSellerLoggedInState(JSON.parse(s));
+    } catch (e) {
+      console.error("Storage error:", e);
+    }
   }, []);
 
   const setUser = (u) => {
     setUserState(u);
-    if (u) localStorage.setItem("cc_user", JSON.stringify(u));
-    else localStorage.removeItem("cc_user");
+    try {
+      if (u) localStorage.setItem("cc_user", JSON.stringify(u));
+      else localStorage.removeItem("cc_user");
+    } catch (e) {}
   };
 
   const addToCart = (item) => {
@@ -30,7 +37,7 @@ export function AppProvider({ children }) {
       const updated = existing
         ? prev.map((i) => i.id === item.id ? { ...i, qty: i.qty + 1 } : i)
         : [...prev, { ...item, qty: 1 }];
-      localStorage.setItem("cc_cart", JSON.stringify(updated));
+      try { localStorage.setItem("cc_cart", JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
   };
@@ -38,7 +45,7 @@ export function AppProvider({ children }) {
   const removeFromCart = (id) => {
     setCart((prev) => {
       const updated = prev.filter((i) => i.id !== id);
-      localStorage.setItem("cc_cart", JSON.stringify(updated));
+      try { localStorage.setItem("cc_cart", JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
   };
@@ -46,26 +53,27 @@ export function AppProvider({ children }) {
   const updateQty = (id, qty) => {
     setCart((prev) => {
       const updated = prev.map((i) => i.id === id ? { ...i, qty } : i);
-      localStorage.setItem("cc_cart", JSON.stringify(updated));
+      try { localStorage.setItem("cc_cart", JSON.stringify(updated)); } catch (e) {}
       return updated;
     });
   };
 
   const clearCart = () => {
     setCart([]);
-    localStorage.removeItem("cc_cart");
+    try { localStorage.removeItem("cc_cart"); } catch (e) {}
   };
 
   const setSellerLoggedIn = (v) => {
     setSellerLoggedInState(v);
-    localStorage.setItem("cc_seller", JSON.stringify(v));
+    try { localStorage.setItem("cc_seller", JSON.stringify(v)); } catch (e) {}
   };
 
   return (
     <AppContext.Provider value={{
       user, setUser,
       cart, addToCart, removeFromCart, updateQty, clearCart,
-      sellerLoggedIn, setSellerLoggedIn
+      sellerLoggedIn, setSellerLoggedIn,
+      mounted
     }}>
       {children}
     </AppContext.Provider>
