@@ -1,100 +1,369 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SellerSidebar from "@/components/SellerSidebar";
-import { products } from "@/data/products";
+import { useApp } from "@/context/AppContext";
+import { defaultStorefront } from "@/context/AppContext";
+import { Save, Eye, RefreshCw, Megaphone, Image as ImageIcon, Info, ToggleLeft, ToggleRight } from "lucide-react";
+
+const SECTIONS = [
+  { key: "heroTitle",     label: "Hero Title",        type: "textarea", help: "Main heading on home page (use \\n for line break)" },
+  { key: "heroSubtitle",  label: "Hero Subtitle",     type: "textarea", help: "Subtext below hero title" },
+  { key: "announcement",  label: "Announcement Banner", type: "text",  help: "Shown as a top banner on buyer pages (leave blank to hide)" },
+  { key: "tagline",       label: "Store Tagline",     type: "text",   help: "Short description shown on footer and meta" },
+  { key: "name",          label: "Store Name",        type: "text",   help: "Displayed in navbar and footer" },
+  { key: "address",       label: "Store Address",     type: "text",   help: "Physical address shown on storefront" },
+  { key: "hours",         label: "Business Hours",    type: "text",   help: 'e.g. "Mon–Sat: 8:00 AM – 6:00 PM"' },
+  { key: "contactEmail",  label: "Contact Email",     type: "email",  help: "Shown in footer contact section" },
+  { key: "contactPhone",  label: "Contact Phone",     type: "tel",    help: "Shown in footer contact section" },
+];
+
+const TOGGLES = [
+  { key: "showFeatured",     label: "Show Featured Products section" },
+  { key: "showNewArrivals",  label: "Show New Arrivals section" },
+  { key: "showTestimonials", label: "Show Testimonials section" },
+];
 
 export default function StorefrontClient() {
-  const [storeName,    setStoreName]    = useState("CoirCraft Philippines");
-  const [storeDesc,    setStoreDesc]    = useState("Premium eco-friendly coconut coir products handcrafted in the Philippines.");
-  const [storeAddress, setStoreAddress] = useState("123 Coir Avenue, Quezon City, Metro Manila");
-  const [storeHours,   setStoreHours]   = useState("Mon–Sat: 8:00 AM – 6:00 PM");
-  const [editing,      setEditing]      = useState(false);
-  const [saved,        setSaved]        = useState(false);
+  const { storefront, setStorefront, inventory, sellerLoggedIn } = useApp();
 
-  const save = () => {
-    setEditing(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  const [form,  setForm]  = useState(storefront);
+  const [saved, setSaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [tab,   setTab]   = useState("content"); // content | visibility | preview
+
+  // Keep form in sync when context loads from localStorage
+  useEffect(() => {
+    setForm(storefront);
+  }, [storefront]);
+
+  if (!sellerLoggedIn) {
+    if (typeof window !== "undefined") window.location.href = "/login";
+    return null;
+  }
+
+  const handleChange = (key, value) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    setDirty(true);
+    setSaved(false);
   };
 
-  const inp = { width: "100%", border: "2px solid #E8EDE8", borderRadius: 12, padding: "11px 16px", fontSize: 14, fontFamily: "var(--font-body)", outline: "none", boxSizing: "border-box", background: "#fff" };
+  const handleSave = () => {
+    setStorefront(form);   // writes to context + localStorage, cross-tab syncs buyer
+    setSaved(true);
+    setDirty(false);
+    setTimeout(() => setSaved(false), 3000);
+  };
 
-  const featured = products.filter((p) => ["Best Seller","Featured"].includes(p.tag)).slice(0, 4);
+  const handleReset = () => {
+    setForm(defaultStorefront);
+    setDirty(true);
+    setSaved(false);
+  };
+
+  const inp = {
+    width: "100%", border: "2px solid #E8EDE8", borderRadius: 12,
+    padding: "11px 14px", fontSize: 13, fontFamily: "var(--font-body)",
+    outline: "none", boxSizing: "border-box", background: "#fff",
+    transition: "border-color 0.2s",
+  };
+  const focus = (e) => (e.target.style.borderColor = "#A8FF3E");
+  const blur  = (e) => (e.target.style.borderColor = "#E8EDE8");
+
+  const featured = (inventory || []).filter((p) => ["Best Seller", "Featured"].includes(p.tag)).slice(0, 4);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
       <SellerSidebar />
-      <main style={{ flex: 1, background: "#F8F9FA", padding: 32, overflowY: "auto" }}>
 
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 800, color: "#0E2011", margin: "0 0 4px" }}>Storefront</h1>
-          <p style={{ color: "#888", fontSize: 14, margin: 0 }}>Manage your public store information.</p>
+      <main
+        className="seller-page-main"
+        style={{ flex: 1, background: "#F8F9FA", padding: 28, overflowY: "auto" }}
+      >
+        <style>{`
+          @media (max-width: 1023px) {
+            .seller-page-main { padding-top: 76px !important; padding-bottom: 88px !important; }
+            .sf-layout { grid-template-columns: 1fr !important; }
+          }
+        `}</style>
+
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22, gap: 14, flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(20px,3vw,26px)", fontWeight: 800, color: "#0E2011", margin: "0 0 4px" }}>
+              🏪 Storefront Editor
+            </h1>
+            <p style={{ color: "#888", fontSize: 13, margin: 0 }}>
+              Changes save to all buyer pages <strong style={{ color: "#1A7A2E" }}>in real time</strong>.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              onClick={handleReset}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                background: "#fff", border: "2px solid #E8EDE8", borderRadius: 50,
+                padding: "10px 18px", fontFamily: "var(--font-body)",
+                fontWeight: 700, fontSize: 12, color: "#888", cursor: "pointer",
+              }}
+            >
+              <RefreshCw size={13} /> Reset Defaults
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!dirty}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                background: dirty ? "linear-gradient(135deg,#A8FF3E,#5BCC1C)" : "#E8F0E8",
+                color: dirty ? "#0E2011" : "#aaa",
+                border: "none", borderRadius: 50, padding: "10px 22px",
+                fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 13,
+                cursor: dirty ? "pointer" : "not-allowed",
+                boxShadow: dirty ? "0 4px 16px rgba(168,255,62,0.35)" : "none",
+                transition: "all 0.2s",
+              }}
+            >
+              <Save size={14} />
+              {saved ? "✓ Saved!" : "Save Changes"}
+            </button>
+          </div>
         </div>
 
+        {/* Flash */}
         {saved && (
-          <div style={{ background: "#E8FFD0", border: "1.5px solid #A8FF3E", borderRadius: 12, padding: "11px 16px", marginBottom: 20, fontSize: 13, color: "#1A7A2E", fontWeight: 700 }}>
-            ✅ Storefront updated!
+          <div style={{
+            background: "#E8FFD0", border: "1.5px solid #A8FF3E",
+            borderRadius: 12, padding: "12px 16px", marginBottom: 18,
+            fontSize: 13, color: "#1A7A2E", fontWeight: 700,
+            display: "flex", alignItems: "center", gap: 10,
+          }}>
+            ✅ Storefront updated! Buyer pages are now showing the new content.
           </div>
         )}
 
-        {/* Store info card */}
-        <div style={{ background: "#fff", borderRadius: 20, padding: "28px 32px", boxShadow: "0 2px 12px rgba(14,32,17,0.06)", marginBottom: 24 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
-            <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 800, color: "#0E2011", margin: 0 }}>Store Information</h2>
-            {!editing
-              ? <button onClick={() => setEditing(true)} style={{ background: "#0E2011", color: "#A8FF3E", border: "none", borderRadius: 50, padding: "9px 22px", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Edit</button>
-              : <div style={{ display: "flex", gap: 10 }}>
-                  <button onClick={save} style={{ background: "linear-gradient(135deg,#A8FF3E,#5BCC1C)", color: "#0E2011", border: "none", borderRadius: 50, padding: "9px 22px", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Save</button>
-                  <button onClick={() => setEditing(false)} style={{ background: "#fff", color: "#888", border: "2px solid #ddd", borderRadius: 50, padding: "8px 20px", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Cancel</button>
-                </div>
-            }
+        {/* Announcement banner preview */}
+        {form.announcement && (
+          <div style={{
+            background: "linear-gradient(135deg,#0E2011,#1A472A)",
+            borderRadius: 12, padding: "12px 16px", marginBottom: 18,
+            fontSize: 13, color: "#A8FF3E", fontWeight: 700,
+            display: "flex", alignItems: "center", gap: 8,
+          }}>
+            <Megaphone size={16} /> Preview: {form.announcement}
           </div>
+        )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-            {[
-              { label: "Store Name",    key: "name",    value: storeName,    set: setStoreName    },
-              { label: "Address",       key: "address", value: storeAddress, set: setStoreAddress },
-              { label: "Opening Hours", key: "hours",   value: storeHours,   set: setStoreHours   },
-            ].map(({ label, key, value, set }) => (
-              <div key={key}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#aaa", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 7 }}>{label}</label>
-                {editing
-                  ? <input value={value} onChange={(e) => set(e.target.value)} style={inp}
-                      onFocus={(e) => e.target.style.borderColor = "#A8FF3E"}
-                      onBlur={(e)  => e.target.style.borderColor = "#E8EDE8"} />
-                  : <div style={{ fontSize: 14, color: "#0E2011", fontWeight: 600 }}>{value}</div>
-                }
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+          {[
+            { key: "content",    label: "📝 Content"     },
+            { key: "visibility", label: "👁️ Visibility"  },
+            { key: "preview",    label: "🖼️ Preview"     },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              style={{
+                padding: "10px 20px", borderRadius: 50,
+                border: "2px solid",
+                borderColor: tab === key ? "#0E2011" : "#E8EDE8",
+                background: tab === key ? "#0E2011" : "#fff",
+                color: tab === key ? "#A8FF3E" : "#555",
+                fontFamily: "var(--font-body)", fontWeight: 700,
+                fontSize: 12, cursor: "pointer", transition: "all 0.15s",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── CONTENT TAB ── */}
+        {tab === "content" && (
+          <div
+            className="sf-layout"
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}
+          >
+            {SECTIONS.map(({ key, label, type, help }) => (
+              <div
+                key={key}
+                style={{
+                  background: "#fff", borderRadius: 16,
+                  padding: "18px", boxShadow: "0 2px 10px rgba(14,32,17,0.05)",
+                }}
+              >
+                <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "#1A7A2E", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 6 }}>
+                  {label}
+                </label>
+                {type === "textarea" ? (
+                  <textarea
+                    value={form[key] || ""}
+                    onChange={(e) => handleChange(key, e.target.value)}
+                    rows={3}
+                    style={{ ...inp, resize: "vertical" }}
+                    onFocus={focus} onBlur={blur}
+                  />
+                ) : (
+                  <input
+                    type={type}
+                    value={form[key] || ""}
+                    onChange={(e) => handleChange(key, e.target.value)}
+                    style={inp}
+                    onFocus={focus} onBlur={blur}
+                  />
+                )}
+                {help && (
+                  <div style={{ fontSize: 11, color: "#bbb", marginTop: 6, display: "flex", alignItems: "flex-start", gap: 4 }}>
+                    <Info size={11} style={{ marginTop: 1, flexShrink: 0 }} />
+                    {help}
+                  </div>
+                )}
               </div>
             ))}
-            <div style={{ gridColumn: "1 / -1" }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#aaa", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 7 }}>Store Description</label>
-              {editing
-                ? <textarea value={storeDesc} onChange={(e) => setStoreDesc(e.target.value)} rows={2}
-                    style={{ ...inp, resize: "vertical" }}
-                    onFocus={(e) => e.target.style.borderColor = "#A8FF3E"}
-                    onBlur={(e)  => e.target.style.borderColor = "#E8EDE8"} />
-                : <div style={{ fontSize: 14, color: "#555", lineHeight: 1.6 }}>{storeDesc}</div>
-              }
+          </div>
+        )}
+
+        {/* ── VISIBILITY TAB ── */}
+        {tab === "visibility" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <p style={{ color: "#888", fontSize: 13, margin: "0 0 6px" }}>
+              Toggle which sections appear on the buyer home page.
+            </p>
+            {TOGGLES.map(({ key, label }) => {
+              const on = form[key];
+              return (
+                <div
+                  key={key}
+                  style={{
+                    background: "#fff", borderRadius: 16, padding: "18px 20px",
+                    boxShadow: "0 2px 10px rgba(14,32,17,0.05)",
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+                    border: `2px solid ${on ? "#A8FF3E" : "#E8EDE8"}`,
+                    transition: "border-color 0.2s",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: "#0E2011" }}>{label}</div>
+                    <div style={{ fontSize: 12, color: "#aaa", marginTop: 3 }}>
+                      Currently: <strong style={{ color: on ? "#1A7A2E" : "#888" }}>{on ? "Visible" : "Hidden"}</strong>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleChange(key, !on)}
+                    style={{
+                      background: "none", border: "none",
+                      cursor: "pointer", padding: 0, flexShrink: 0,
+                      color: on ? "#1A7A2E" : "#ccc",
+                    }}
+                  >
+                    {on
+                      ? <ToggleRight size={44} strokeWidth={1.5} />
+                      : <ToggleLeft  size={44} strokeWidth={1.5} />}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── PREVIEW TAB ── */}
+        {tab === "preview" && (
+          <div>
+            <p style={{ color: "#888", fontSize: 13, marginBottom: 16 }}>
+              This is how the home page hero will appear to buyers based on your current settings.
+            </p>
+
+            {/* Hero preview */}
+            <div style={{
+              background: "linear-gradient(135deg,#0E2011,#1A472A)",
+              borderRadius: 20, padding: "clamp(28px,5vw,48px) clamp(20px,4vw,40px)",
+              position: "relative", overflow: "hidden", marginBottom: 16,
+            }}>
+              <div style={{ position: "absolute", top: "-20%", right: "-5%", width: "300px", height: "300px", background: "radial-gradient(circle,rgba(168,255,62,0.1) 0%,transparent 70%)", borderRadius: "50%", pointerEvents: "none" }} />
+              {form.announcement && (
+                <div style={{ background: "rgba(168,255,62,0.13)", border: "1px solid rgba(168,255,62,0.28)", borderRadius: 8, padding: "6px 14px", display: "inline-block", color: "#A8FF3E", fontSize: 12, fontWeight: 700, marginBottom: 18 }}>
+                  📢 {form.announcement}
+                </div>
+              )}
+              <h2 style={{
+                fontFamily: "var(--font-display)", fontWeight: 800, color: "#fff",
+                fontSize: "clamp(22px,4vw,38px)", margin: "0 0 12px", lineHeight: 1.1,
+              }}>
+                {(form.heroTitle || "").split("\n").map((line, i) => (
+                  <span key={i}>{i > 0 && <br />}{line}</span>
+                ))}
+              </h2>
+              <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "clamp(12px,2vw,15px)", lineHeight: 1.7, maxWidth: 520, margin: "0 0 24px" }}>
+                {form.heroSubtitle}
+              </p>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ background: "linear-gradient(135deg,#A8FF3E,#5BCC1C)", color: "#0E2011", borderRadius: 999, padding: "11px 28px", fontWeight: 800, fontSize: 13, fontFamily: "var(--font-display)" }}>Create Account — Free</div>
+                <div style={{ background: "rgba(255,255,255,0.08)", color: "#fff", border: "2px solid rgba(255,255,255,0.35)", borderRadius: 999, padding: "10px 26px", fontWeight: 700, fontSize: 13 }}>Sign In</div>
+              </div>
+            </div>
+
+            {/* Section visibility indicators */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
+              {TOGGLES.map(({ key, label }) => (
+                <div
+                  key={key}
+                  style={{
+                    background: form[key] ? "#E8FFD0" : "#F5F5F5",
+                    border: `2px solid ${form[key] ? "#A8FF3E" : "#ddd"}`,
+                    borderRadius: 12, padding: "12px 14px",
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 18, marginBottom: 4 }}>{form[key] ? "✅" : "🚫"}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: form[key] ? "#1A7A2E" : "#888" }}>{label.replace("Show ", "")}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Featured products preview */}
+            <div style={{ background: "#fff", borderRadius: 16, padding: "20px", boxShadow: "0 2px 12px rgba(14,32,17,0.06)" }}>
+              <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 16, color: "#0E2011", margin: "0 0 16px" }}>
+                Featured Products Preview
+              </h3>
+              {featured.length === 0 ? (
+                <p style={{ color: "#aaa", fontSize: 13 }}>No featured products yet. Tag products as "Best Seller" or "Featured" in Inventory.</p>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+                  {featured.map((p) => (
+                    <div key={p.id} style={{ borderRadius: 14, overflow: "hidden", border: "1.5px solid #E8EDE8" }}>
+                      <div style={{ height: 100, background: "#E8FFD0", overflow: "hidden" }}>
+                        {p.image && <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} />}
+                      </div>
+                      <div style={{ padding: "10px 12px" }}>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: "#0E2011", marginBottom: 3 }}>{p.name}</div>
+                        <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, color: "#1A7A2E", fontSize: 14 }}>₱{p.price.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Store info preview */}
+            <div style={{ background: "#0E2011", borderRadius: 16, padding: "20px", marginTop: 16, color: "#fff" }}>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 16, color: "#A8FF3E", marginBottom: 12 }}>Footer Preview</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 13 }}>
+                <div>
+                  <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Store</div>
+                  <div style={{ fontWeight: 700 }}>{form.name}</div>
+                  <div style={{ color: "rgba(255,255,255,0.5)", marginTop: 4, fontSize: 12 }}>{form.tagline}</div>
+                </div>
+                <div>
+                  <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Contact</div>
+                  <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}>{form.address}</div>
+                  <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 2 }}>{form.hours}</div>
+                  <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 2 }}>{form.contactEmail}</div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Store preview */}
-        <div style={{ background: "#fff", borderRadius: 20, padding: "28px 32px", boxShadow: "0 2px 12px rgba(14,32,17,0.06)" }}>
-          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 800, color: "#0E2011", margin: "0 0 20px" }}>Featured Products Preview</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 16 }}>
-            {featured.map((p) => (
-              <div key={p.id} style={{ background: "#F5F9F0", borderRadius: 16, overflow: "hidden" }}>
-                <img src={p.image} alt={p.name} style={{ width: "100%", height: 130, objectFit: "cover" }}
-                  onError={(e) => { e.target.style.display="none"; }} />
-                <div style={{ padding: "12px 14px" }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: "#0E2011", marginBottom: 4 }}>{p.name}</div>
-                  <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, color: "#1A7A2E", fontSize: 15 }}>₱{p.price.toLocaleString()}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <div className="seller-mobile-bottom-spacer" />
       </main>
     </div>
   );
