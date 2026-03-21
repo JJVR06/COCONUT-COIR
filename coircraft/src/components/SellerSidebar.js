@@ -10,6 +10,7 @@ import {
   Store,
   BarChart3,
   Star,
+  BookOpen,
   LogOut,
   Menu,
   X,
@@ -23,6 +24,7 @@ const NAV_LINKS = [
   { href: "/seller/storefront", icon: Store,           label: "Storefront" },
   { href: "/seller/reports",    icon: BarChart3,       label: "Reports"    },
   { href: "/seller/reviews",    icon: Star,            label: "Reviews"    },
+  { href: "/seller/sources",    icon: BookOpen,        label: "Sources"    },
 ];
 
 function logout() {

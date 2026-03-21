@@ -4,7 +4,7 @@ import Link from "next/link";
 export default function Footer() {
   const SHOP    = [{ href:"/store",label:"Store" },{ href:"/products",label:"All Products" },{ href:"/products?tag=New",label:"New Arrivals" },{ href:"/products?tag=Best Seller",label:"Best Sellers" }];
   const ACCOUNT = [{ href:"/login",label:"Sign In" },{ href:"/register",label:"Register" },{ href:"/cart",label:"My Cart" },{ href:"/history",label:"My Orders" },{ href:"/profile",label:"My Profile" }];
-  const ABOUT   = [{ href:"/",label:"About Us" },{ href:"/",label:"Sustainability" },{ href:"/",label:"Contact" },{ href:"/",label:"FAQ" }];
+  const ABOUT   = [{ href:"/about",label:"About Us" },{ href:"/",label:"Sustainability" },{ href:"/",label:"Contact" },{ href:"/",label:"FAQ" }];
 
   return (
     <footer style={{ background: "#0E2011", color: "#fff", fontFamily: "var(--font-body)" }}>
