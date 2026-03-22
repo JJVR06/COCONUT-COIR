@@ -1,10 +1,20 @@
 import { sql } from "@/lib/db";
 import { NextResponse } from "next/server";
 
-// GET all orders for a user
+// GET all orders for a user — or ALL orders when seller=true
 export async function GET(req) {
   try {
-    const email = req.nextUrl.searchParams.get("email");
+    const email  = req.nextUrl.searchParams.get("email");
+    const seller = req.nextUrl.searchParams.get("seller");
+
+    if (seller === "true") {
+      // Seller sees every order from every buyer
+      const orders = await sql`
+        SELECT * FROM orders ORDER BY created_at DESC
+      `;
+      return NextResponse.json(orders);
+    }
+
     if (!email) return NextResponse.json([]);
 
     const orders = await sql`

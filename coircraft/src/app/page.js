@@ -4,7 +4,7 @@ import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
 import Link from "next/link";
 import { useApp } from "@/context/AppContext";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /* ── Scroll-reveal wrapper ── */
 function Reveal({ children, delay = 0 }) {
@@ -17,7 +17,7 @@ function Reveal({ children, delay = 0 }) {
     el.style.transition = `opacity 0.65s ${delay}ms ease, transform 0.65s ${delay}ms ease`;
     const obs = new IntersectionObserver(
       ([e]) => { if (e.isIntersecting) { el.style.opacity = "1"; el.style.transform = "translateY(0)"; } },
-      { threshold: 0.1 }
+      { threshold: 0.08 }
     );
     obs.observe(el);
     return () => obs.disconnect();
@@ -28,23 +28,24 @@ function Reveal({ children, delay = 0 }) {
 /* ── Product grid skeleton ── */
 function ProductGridSkeleton({ count = 4 }) {
   return (
-    <>
-      <style>{`
-        @keyframes skeletonShimmer { from{background-position:-400px 0} to{background-position:400px 0} }
-        .tk-skeleton-card {
-          background: linear-gradient(90deg,#E8F0E0 25%,#F2FAF0 50%,#E8F0E0 75%);
-          background-size: 800px 100%;
-          animation: skeletonShimmer 1.6s linear infinite;
-          border-radius: 20px;
-          aspect-ratio: 3/4;
-        }
-      `}</style>
-      <div className="tk-grid-products">
-        {Array.from({ length: count }).map((_, i) => (
-          <div key={i} className="tk-skeleton-card" />
-        ))}
+    <div className="tk-grid-products">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="tk-skeleton" style={{ borderRadius: 20, aspectRatio: "3/4" }} />
+      ))}
+    </div>
+  );
+}
+
+/* ── Animated counter for hero stats ── */
+function AnimatedStat({ value, label, icon }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+      <div style={{ width: "clamp(40px,5vw,48px)", height: "clamp(40px,5vw,48px)", background: "rgba(168,255,62,0.12)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: "clamp(16px,2.5vw,20px)" }}>{icon}</div>
+      <div>
+        <div style={{ color: "#fff", fontWeight: 700, fontSize: "clamp(12px,2vw,14px)" }}>{value}</div>
+        <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "clamp(10px,1.5vw,12px)" }}>{label}</div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -57,6 +58,13 @@ const CATS = [
 
 export default function Home() {
   const { user, inventory, inventoryLoaded, storefront } = useApp();
+  const [heroReady, setHeroReady] = useState(false);
+
+  // Hero animates in immediately regardless of data loading
+  useEffect(() => {
+    const t = setTimeout(() => setHeroReady(true), 50);
+    return () => clearTimeout(t);
+  }, []);
 
   const products = Array.isArray(inventory) ? inventory : [];
   const sf       = storefront || {};
@@ -64,7 +72,6 @@ export default function Home() {
   const featured = products.filter((p) => ["Best Seller", "Trending"].includes(p.tag)).slice(0, 4);
   const newArr   = products.filter((p) => p.tag === "New").slice(0, 4);
 
-  // Parse hero title (supports \n from seller storefront editor)
   const heroLines = (sf.heroTitle || "Sustainable Living\nStarts with Coconut Coir.").split("\\n");
 
   return (
@@ -74,13 +81,21 @@ export default function Home() {
 
         {/* ── Announcement banner ── */}
         {sf.announcement && (
-          <div style={{ background: "linear-gradient(90deg,#0E2011,#1A472A)", color: "#A8FF3E", textAlign: "center", padding: "10px 16px", fontSize: 13, fontWeight: 700 }}>
+          <div style={{ background: "linear-gradient(90deg,#0E2011,#1A472A)", color: "#A8FF3E", textAlign: "center", padding: "10px 16px", fontSize: 13, fontWeight: 700, animation: "fadeDown 0.4s ease both" }}>
             📢 {sf.announcement}
           </div>
         )}
 
         {/* ── HERO ── */}
-        <section className="tk-hero" style={{ background: "linear-gradient(140deg,#0E2011 0%,#1A472A 50%,#0E2011 100%)", position: "relative", overflow: "hidden", textAlign: "center" }}>
+        <section
+          className="tk-hero"
+          style={{
+            background: "linear-gradient(140deg,#0E2011 0%,#1A472A 50%,#0E2011 100%)",
+            position: "relative", overflow: "hidden", textAlign: "center",
+            opacity: heroReady ? 1 : 0,
+            transition: "opacity 0.3s ease",
+          }}
+        >
           <div className="tk-glow tk-glow-lime anim-float" style={{ width: "clamp(300px,50vw,600px)", height: "clamp(300px,50vw,600px)", top: "-20%", left: "50%", transform: "translateX(-50%)" }} />
           <div style={{ position: "absolute", right: "5%", bottom: "-10%", fontSize: "clamp(120px,20vw,280px)", opacity: 0.04, userSelect: "none", lineHeight: 1 }}>🌿</div>
 
@@ -94,16 +109,14 @@ export default function Home() {
                 <span key={i}>
                   {i > 0 && <br />}
                   {i === heroLines.length - 1
-                    ? <>
-                        {line.includes("Coconut Coir") ? (
-                          <>
-                            {line.replace("Coconut Coir.", "")}{" "}
-                            <span style={{ background: "linear-gradient(90deg,#A8FF3E,#6BCC1C)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", display: "inline-block" }}>
-                              Coconut Coir.
-                            </span>
-                          </>
-                        ) : line}
-                      </>
+                    ? line.includes("Coconut Coir") ? (
+                        <>
+                          {line.replace("Coconut Coir.", "")}{" "}
+                          <span style={{ background: "linear-gradient(90deg,#A8FF3E,#6BCC1C)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", display: "inline-block" }}>
+                            Coconut Coir.
+                          </span>
+                        </>
+                      ) : line
                     : line}
                 </span>
               ))}
@@ -115,46 +128,23 @@ export default function Home() {
 
             {user ? (
               <div className="anim-fadeUp delay-3" style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-                <Link href="/store"    className="tk-btn-cta"          style={{ textDecoration: "none" }}>Browse Store</Link>
+                <Link href="/store"    className="tk-btn-cta tk-ripple"          style={{ textDecoration: "none" }}>Browse Store</Link>
                 <Link href="/products" className="tk-btn-outline-white" style={{ textDecoration: "none" }}>All Products</Link>
               </div>
             ) : (
               <div className="anim-fadeUp delay-3" style={{ background: "rgba(168,255,62,0.09)", border: "1.5px solid rgba(168,255,62,0.25)", borderRadius: 20, padding: "clamp(18px,4vw,28px) clamp(16px,4vw,32px)", marginBottom: 36, display: "inline-block", maxWidth: "100%" }}>
                 <p style={{ color: "#A8FF3E", fontWeight: 700, fontSize: 13, margin: "0 0 14px" }}>🎉 Create a free account to start shopping</p>
                 <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-                  <Link href="/register" className="tk-btn-cta"          style={{ textDecoration: "none" }}>Create Account — Free</Link>
+                  <Link href="/register" className="tk-btn-cta tk-ripple"          style={{ textDecoration: "none" }}>Create Account — Free</Link>
                   <Link href="/login"    className="tk-btn-outline-white" style={{ textDecoration: "none" }}>Sign In</Link>
                 </div>
               </div>
             )}
 
-            <style>{`
-              .hero-badges {
-                display: flex; gap: 14px; justify-content: flex-end;
-                flex-wrap: nowrap; margin-top: 28px; width: 100%;
-              }
-              @media (min-width: 600px) {
-                .hero-badges { justify-content: center; gap: clamp(16px,4vw,44px); }
-              }
-              .hero-badge-icon  { width: 36px; height: 36px; font-size: 16px; }
-              .hero-badge-title { font-size: 12px; }
-              .hero-badge-sub   { font-size: 10px; }
-              @media (min-width: 400px) {
-                .hero-badge-icon  { width: 42px; height: 42px; font-size: 18px; }
-                .hero-badge-title { font-size: 13px; }
-                .hero-badge-sub   { font-size: 11px; }
-              }
-            `}</style>
-            <div className="anim-fadeUp delay-4 hero-badges" style={{ marginTop: user ? "28px" : "0" }}>
-              {[["🌿", "Natural", "Zero synthetic"], ["🇵🇭", "Local", "Made in PH"], ["♻️", "Zero Waste", "Biodegradable"]].map(([icon, title, sub]) => (
-                <div key={title} style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                  <div className="hero-badge-icon" style={{ background: "rgba(168,255,62,0.12)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
-                  <div>
-                    <div className="hero-badge-title" style={{ color: "#fff", fontWeight: 700 }}>{title}</div>
-                    <div className="hero-badge-sub" style={{ color: "rgba(255,255,255,0.45)" }}>{sub}</div>
-                  </div>
-                </div>
-              ))}
+            <div className="anim-fadeUp delay-4" style={{ display: "flex", gap: "clamp(12px,3vw,44px)", justifyContent: "center", flexWrap: "wrap", marginTop: user ? 28 : 0, paddingTop: user ? 0 : 8 }}>
+              <AnimatedStat icon="🌿" value="100% Natural" label="Zero synthetic" />
+              <AnimatedStat icon="🇵🇭" value="Local"       label="Made in PH"    />
+              <AnimatedStat icon="♻️" value="Zero Waste"   label="Biodegradable" />
             </div>
           </div>
         </section>
@@ -166,12 +156,20 @@ export default function Home() {
           <section className="tk-section" style={{ paddingTop: 32, paddingBottom: 32 }}>
             <div className="tk-container">
               <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, scrollbarWidth: "none" }}>
-                {CATS.map(({ label, icon }) => (
+                {CATS.map(({ label, icon }, i) => (
                   <Link
                     key={label} href={`/products?cat=${label}`}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "#fff", border: "2px solid #E5EDE5", borderRadius: 999, padding: "10px 20px", textDecoration: "none", fontWeight: 700, fontSize: 13, color: "#0E2011", whiteSpace: "nowrap", transition: "all 0.2s", flexShrink: 0 }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#A8FF3E"; e.currentTarget.style.background = "#E8FFD0"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#E5EDE5"; e.currentTarget.style.background = "#fff"; }}
+                    className="anim-fadeUp"
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 8,
+                      background: "#fff", border: "2px solid #E5EDE5", borderRadius: 999,
+                      padding: "10px 20px", textDecoration: "none", fontWeight: 700,
+                      fontSize: 13, color: "#0E2011", whiteSpace: "nowrap",
+                      transition: "all 0.22s var(--ease-bounce)",
+                      flexShrink: 0, animationDelay: `${i * 60}ms`,
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#A8FF3E"; e.currentTarget.style.background = "#E8FFD0"; e.currentTarget.style.transform = "translateY(-3px) scale(1.04)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#E5EDE5"; e.currentTarget.style.background = "#fff"; e.currentTarget.style.transform = "translateY(0) scale(1)"; }}
                   >
                     {icon} {label}
                   </Link>
@@ -182,7 +180,7 @@ export default function Home() {
         </Reveal>
 
         {/* ── Featured Products ── */}
-        {(sf.showFeatured !== false) && (
+        {sf.showFeatured !== false && (
           <Reveal delay={50}>
             <section className="tk-section" style={{ paddingTop: 16 }}>
               <div className="tk-container">
@@ -193,25 +191,27 @@ export default function Home() {
                     </div>
                     <h2 className="tk-h2" style={{ color: "#0E2011", margin: 0 }}>Featured Products</h2>
                   </div>
-                  <Link href="/products" style={{ color: "#1A7A2E", fontWeight: 700, fontSize: 14, textDecoration: "none", display: "flex", alignItems: "center", gap: 4, border: "2px solid #E5EDE5", borderRadius: 999, padding: "8px 18px", transition: "all 0.2s" }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#0E2011"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#E5EDE5"; }}>
+                  <Link href="/products"
+                    style={{ color: "#1A7A2E", fontWeight: 700, fontSize: 14, textDecoration: "none", display: "flex", alignItems: "center", gap: 4, border: "2px solid #E5EDE5", borderRadius: 999, padding: "8px 18px", transition: "all 0.2s" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#0E2011"; e.currentTarget.style.transform = "translateX(2px)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#E5EDE5"; e.currentTarget.style.transform = "translateX(0)"; }}>
                     View All →
                   </Link>
                 </div>
 
-                {/* Show skeleton while loading, real cards once ready */}
-                {!inventoryLoaded ? (
+                {/* Show skeleton only when inventory has never loaded AND cache is empty */}
+                {!inventoryLoaded && products.length === 0 ? (
                   <ProductGridSkeleton count={4} />
                 ) : featured.length > 0 ? (
                   <div className="tk-grid-products">
                     {featured.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
                   </div>
-                ) : (
-                  /* No featured products yet — silent empty state so layout doesn't shift */
+                ) : inventoryLoaded ? (
                   <div style={{ textAlign: "center", padding: "32px 0", color: "#ccc", fontSize: 13 }}>
                     No featured products yet.
                   </div>
+                ) : (
+                  <ProductGridSkeleton count={4} />
                 )}
               </div>
             </section>
@@ -231,13 +231,14 @@ export default function Home() {
                   <p style={{ color: "rgba(255,255,255,0.60)", fontSize: 15, lineHeight: 1.75, marginBottom: 28 }}>
                     One of the world&apos;s most sustainable fibers — and the Philippines produces some of the finest available.
                   </p>
-                  <Link href="/store" className="tk-btn-cta" style={{ textDecoration: "none" }}>Shop Collection</Link>
+                  <Link href="/store" className="tk-btn-cta tk-ripple" style={{ textDecoration: "none" }}>Shop Collection</Link>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, position: "relative", zIndex: 1 }}>
                   {[["🌍", "Biodegradable", "Breaks down naturally"], ["💪", "Ultra Durable", "3× longer lasting"], ["🌊", "Water Wise", "Natural moisture control"], ["🌱", "Eco-Certified", "PH verified sustainable"]].map(([icon, title, desc]) => (
-                    <div key={title} style={{ background: "rgba(255,255,255,0.06)", borderRadius: 16, padding: "18px 16px", border: "1px solid rgba(168,255,62,0.12)", transition: "all 0.2s" }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(168,255,62,0.1)"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}>
+                    <div key={title}
+                      style={{ background: "rgba(255,255,255,0.06)", borderRadius: 16, padding: "18px 16px", border: "1px solid rgba(168,255,62,0.12)", transition: "all 0.25s var(--ease-bounce)", cursor: "default" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(168,255,62,0.1)"; e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.borderColor = "rgba(168,255,62,0.3)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.borderColor = "rgba(168,255,62,0.12)"; }}>
                       <div style={{ fontSize: 26, marginBottom: 8 }}>{icon}</div>
                       <div style={{ color: "#A8FF3E", fontWeight: 700, fontSize: 13, marginBottom: 3 }}>{title}</div>
                       <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 11 }}>{desc}</div>
@@ -250,7 +251,7 @@ export default function Home() {
         </Reveal>
 
         {/* ── New Arrivals ── */}
-        {(sf.showNewArrivals !== false) && (
+        {sf.showNewArrivals !== false && (
           <Reveal delay={50}>
             <section className="tk-section" style={{ paddingTop: 0 }}>
               <div className="tk-container">
@@ -261,23 +262,26 @@ export default function Home() {
                     </div>
                     <h2 className="tk-h2" style={{ color: "#0E2011", margin: 0 }}>New Arrivals</h2>
                   </div>
-                  <Link href="/products?tag=New" style={{ color: "#1A7A2E", fontWeight: 700, fontSize: 14, textDecoration: "none", border: "2px solid #E5EDE5", borderRadius: 999, padding: "8px 18px", transition: "all 0.2s" }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#0E2011"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#E5EDE5"; }}>
+                  <Link href="/products?tag=New"
+                    style={{ color: "#1A7A2E", fontWeight: 700, fontSize: 14, textDecoration: "none", border: "2px solid #E5EDE5", borderRadius: 999, padding: "8px 18px", transition: "all 0.2s" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#0E2011"; e.currentTarget.style.transform = "translateX(2px)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#E5EDE5"; e.currentTarget.style.transform = "translateX(0)"; }}>
                     See All →
                   </Link>
                 </div>
 
-                {!inventoryLoaded ? (
+                {!inventoryLoaded && products.length === 0 ? (
                   <ProductGridSkeleton count={4} />
                 ) : newArr.length > 0 ? (
                   <div className="tk-grid-products">
                     {newArr.map((p, i) => <ProductCard key={p.id} product={p} index={i + 4} />)}
                   </div>
-                ) : (
+                ) : inventoryLoaded ? (
                   <div style={{ textAlign: "center", padding: "32px 0", color: "#ccc", fontSize: 13 }}>
                     No new arrivals yet.
                   </div>
+                ) : (
+                  <ProductGridSkeleton count={4} />
                 )}
               </div>
             </section>
@@ -296,7 +300,7 @@ export default function Home() {
                   Create a free account and start shopping our sustainable coconut coir collection.
                 </p>
                 <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-                  <Link href="/register" className="tk-btn-cta"          style={{ textDecoration: "none" }}>Get Started — Free</Link>
+                  <Link href="/register" className="tk-btn-cta tk-ripple"          style={{ textDecoration: "none" }}>Get Started — Free</Link>
                   <Link href="/products" className="tk-btn-outline-white" style={{ textDecoration: "none" }}>Browse First</Link>
                 </div>
               </div>
@@ -305,7 +309,7 @@ export default function Home() {
         )}
 
         {/* ── Testimonials ── */}
-        {(sf.showTestimonials !== false) && (
+        {sf.showTestimonials !== false && (
           <Reveal>
             <section className="tk-section" style={{ background: "#F0FFD9" }}>
               <div className="tk-container">
@@ -323,8 +327,8 @@ export default function Home() {
                     ["★★★★★", "Love these locally-made sustainable products.", "Ana Reyes", "Cebu City"],
                   ].map(([stars, text, author, loc]) => (
                     <div key={author}
-                      style={{ background: "#fff", borderRadius: 20, padding: "24px 22px", boxShadow: "0 4px 20px rgba(14,32,17,0.06)", border: "1.5px solid #E8FFD0", transition: "transform 0.3s ease, box-shadow 0.3s ease", display: "flex", flexDirection: "column" }}
-                      onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-6px)"; e.currentTarget.style.boxShadow = "0 14px 36px rgba(14,32,17,0.12)"; }}
+                      style={{ background: "#fff", borderRadius: 20, padding: "24px 22px", boxShadow: "0 4px 20px rgba(14,32,17,0.06)", border: "1.5px solid #E8FFD0", transition: "transform 0.3s var(--ease-bounce), box-shadow 0.3s ease", display: "flex", flexDirection: "column" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-8px)"; e.currentTarget.style.boxShadow = "0 16px 40px rgba(14,32,17,0.12)"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 20px rgba(14,32,17,0.06)"; }}>
                       <div style={{ color: "#F4A01A", fontSize: 15, marginBottom: 10, letterSpacing: 2 }}>{stars}</div>
                       <p style={{ fontSize: 14, lineHeight: 1.75, color: "#444", marginBottom: 16, flex: 1 }}>&ldquo;{text}&rdquo;</p>

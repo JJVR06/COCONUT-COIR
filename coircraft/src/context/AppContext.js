@@ -37,40 +37,88 @@ const DEFAULTS = {
   cart:             [],
   transactions:     [],
   wishlist:         [],
-  reviews:          {},
+  reviews:          {},     // { [productId]: review[] } — for buyer detail pages
+  allReviews:       [],     // flat array — for seller reviews dashboard
   inventory:        [],
   inventoryLoaded:  false,
   storefront:       DEFAULT_STOREFRONT,
 };
 
+/** Map a raw DB order row → context transaction shape */
+function mapOrder(o) {
+  return {
+    id:         o.id,
+    date:       new Date(o.created_at).toLocaleString(),
+    created_at: o.created_at,
+    items:      typeof o.items === "string" ? JSON.parse(o.items) : (o.items ?? []),
+    total:      Number(o.total),
+    method:     o.method,
+    delivery:   o.delivery,
+    address:    o.address,
+    status:     o.status,
+    user_email: o.user_email,
+  };
+}
+
+/** Map a raw DB review row → context review shape */
+function mapReview(r) {
+  return {
+    productId:  r.product_id,
+    userEmail:  r.user_email,
+    author:     r.author,
+    rating:     r.rating,
+    comment:    r.comment,
+    date:       new Date(r.created_at).toLocaleDateString("en-PH", {
+                  year: "numeric", month: "long", day: "numeric",
+                }),
+  };
+}
+
 export function AppProvider({ children }) {
   const [state,    setState]    = useState(DEFAULTS);
   const [hydrated, setHydrated] = useState(false);
-  const stateRef = useRef(state);
+  const stateRef   = useRef(state);
   stateRef.current = state;
 
   // ── HYDRATE FROM LOCALSTORAGE ON MOUNT ──────────────────────────────────
   useEffect(() => {
     const user           = ls_read("cc_user",       null);
     const sellerLoggedIn = ls_read("cc_seller",     false);
-    // Seed from localStorage while the DB fetch is in flight
     const cachedSf       = ls_read("cc_storefront", DEFAULT_STOREFRONT);
-    setState((p) => ({ ...p, user, sellerLoggedIn, storefront: cachedSf }));
+
+    // Immediately show cached inventory so the homepage is never blank
+    const cached = ls_read("cc_inventory_cache", null);
+    const cachedInventory = (cached?.data && Array.isArray(cached.data) && cached.data.length > 0)
+      ? cached.data : [];
+
+    setState((p) => ({
+      ...p,
+      user,
+      sellerLoggedIn,
+      storefront: cachedSf,
+      // Pre-populate inventory from cache; inventoryLoaded stays false until DB confirms
+      inventory: cachedInventory,
+    }));
     setHydrated(true);
   }, []);
 
   // ── DB LOADERS ──────────────────────────────────────────────────────────
 
-  // Inventory — checks 5-minute localStorage cache first
   const loadInventoryFromDB = useCallback(async () => {
     try {
       const cached = ls_read("cc_inventory_cache", null);
       const now    = Date.now();
-      if (cached?.ts && (now - cached.ts) < INVENTORY_TTL && Array.isArray(cached.data) && cached.data.length > 0) {
+      if (
+        cached?.ts &&
+        (now - cached.ts) < INVENTORY_TTL &&
+        Array.isArray(cached.data) &&
+        cached.data.length > 0
+      ) {
         setState((p) => ({ ...p, inventory: cached.data, inventoryLoaded: true }));
         return;
       }
       const res  = await fetch("/api/products");
+      if (!res.ok) throw new Error("fetch failed");
       const data = await res.json();
       if (Array.isArray(data)) {
         ls_write("cc_inventory_cache", { ts: now, data });
@@ -79,22 +127,20 @@ export function AppProvider({ children }) {
         setState((p) => ({ ...p, inventoryLoaded: true }));
       }
     } catch {
+      // Mark as loaded even on error so the UI doesn't hang forever
       setState((p) => ({ ...p, inventoryLoaded: true }));
     }
   }, []);
 
-  // Storefront — loads from DB, merges with defaults, syncs to localStorage
   const loadStorefrontFromDB = useCallback(async () => {
     try {
       const res  = await fetch("/api/storefront");
+      if (!res.ok) return;
       const data = await res.json();
-      // Merge: DB values override defaults, but defaults fill missing keys
       const merged = { ...DEFAULT_STOREFRONT, ...data };
       ls_write("cc_storefront", merged);
       setState((p) => ({ ...p, storefront: merged }));
-    } catch {
-      // Keep the localStorage-seeded value; DB unreachable
-    }
+    } catch {}
   }, []);
 
   const loadCartFromDB = useCallback(async (email) => {
@@ -113,25 +159,37 @@ export function AppProvider({ children }) {
     } catch {}
   }, []);
 
+  /** Load orders for a specific buyer */
   const loadOrdersFromDB = useCallback(async (email) => {
     try {
       const res  = await fetch(`/api/orders?email=${encodeURIComponent(email)}`);
       const data = await res.json();
       if (Array.isArray(data)) {
-        const txs = data.map((o) => ({
-          id:         o.id,
-          // Human-readable display date
-          date:       new Date(o.created_at).toLocaleString(),
-          // Raw ISO timestamp — used for accurate day/month math in reports
-          created_at: o.created_at,
-          items:      typeof o.items === "string" ? JSON.parse(o.items) : o.items,
-          total:      Number(o.total),
-          method:     o.method,
-          delivery:   o.delivery,
-          address:    o.address,
-          status:     o.status,
-        }));
-        setState((p) => ({ ...p, transactions: txs }));
+        setState((p) => ({ ...p, transactions: data.map(mapOrder) }));
+      }
+    } catch {}
+  }, []);
+
+  /** Load ALL orders from every buyer — seller only */
+  const loadAllOrdersFromDB = useCallback(async () => {
+    try {
+      const res  = await fetch("/api/orders?seller=true");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setState((p) => ({ ...p, transactions: data.map(mapOrder) }));
+      }
+    } catch {}
+  }, []);
+
+  /** Load ALL reviews from every product — seller only */
+  const loadAllReviewsFromDB = useCallback(async () => {
+    try {
+      const res  = await fetch("/api/reviews?all=true");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setState((p) => ({ ...p, allReviews: data.map(mapReview) }));
       }
     } catch {}
   }, []);
@@ -139,10 +197,34 @@ export function AppProvider({ children }) {
   // ── BOOT LOADERS ─────────────────────────────────────────────────────────
   useEffect(() => {
     loadInventoryFromDB();
-    loadStorefrontFromDB(); // load storefront from DB on every page load
+    loadStorefrontFromDB();
   }, [loadInventoryFromDB, loadStorefrontFromDB]);
 
-  // Load all user-specific data when the user session is established
+  // When seller logs in, load ALL orders + reviews (and poll every 30 s)
+  useEffect(() => {
+    if (!hydrated || !state.sellerLoggedIn) return;
+    loadAllOrdersFromDB();
+    loadAllReviewsFromDB();
+
+    const interval = setInterval(() => {
+      loadAllOrdersFromDB();
+      loadAllReviewsFromDB();
+    }, 30_000);
+
+    // Also reload when the tab becomes visible again (user switches tabs)
+    const handleFocus = () => {
+      loadAllOrdersFromDB();
+      loadAllReviewsFromDB();
+    };
+    document.addEventListener("visibilitychange", handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
+  }, [hydrated, state.sellerLoggedIn, loadAllOrdersFromDB, loadAllReviewsFromDB]);
+
+  // Load buyer-specific data when user session is established
   useEffect(() => {
     if (!hydrated) return;
     if (!state.user?.email) {
@@ -169,13 +251,9 @@ export function AppProvider({ children }) {
   }, []);
 
   // ── STOREFRONT ───────────────────────────────────────────────────────────
-  // Saves to both localStorage (instant, offline) AND the DB (persistent)
   const setStorefront = useCallback(async (sf) => {
-    // 1. Update React state and localStorage immediately so the UI responds instantly
     ls_write("cc_storefront", sf);
     setState((p) => ({ ...p, storefront: sf }));
-
-    // 2. Persist to DB in the background so it survives browser cache clears
     try {
       await fetch("/api/storefront", {
         method:  "POST",
@@ -184,7 +262,6 @@ export function AppProvider({ children }) {
       });
     } catch (err) {
       console.error("Storefront save to DB failed:", err);
-      // localStorage copy is still there — data not lost
     }
   }, []);
 
@@ -302,15 +379,20 @@ export function AppProvider({ children }) {
         t.id === txId ? { ...t, status: "Received" } : t
       ),
     }));
-    const email = stateRef.current.user?.email;
     fetch("/api/orders", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: txId, status: "Received" }),
     }).catch(async () => {
+      const email = stateRef.current.user?.email;
       if (email) await loadOrdersFromDB(email);
     });
   }, [loadOrdersFromDB]);
+
+  // Expose so seller pages can manually trigger a refresh
+  const refreshSellerData = useCallback(async () => {
+    await Promise.all([loadAllOrdersFromDB(), loadAllReviewsFromDB()]);
+  }, [loadAllOrdersFromDB, loadAllReviewsFromDB]);
 
   // ── WISHLIST ─────────────────────────────────────────────────────────────
   const toggleWishlist = useCallback(async (productId) => {
@@ -331,7 +413,9 @@ export function AppProvider({ children }) {
   }, []);
 
   const isWishlisted = useCallback(
-    (productId) => state.wishlist.includes(Number(productId)) || state.wishlist.includes(String(productId)),
+    (productId) =>
+      state.wishlist.includes(Number(productId)) ||
+      state.wishlist.includes(String(productId)),
     [state.wishlist]
   );
 
@@ -341,13 +425,7 @@ export function AppProvider({ children }) {
       const res  = await fetch(`/api/reviews?productId=${productId}`);
       const data = await res.json();
       if (Array.isArray(data)) {
-        const mapped = data.map((r) => ({
-          productId: r.product_id,
-          author:    r.author,
-          rating:    r.rating,
-          comment:   r.comment,
-          date:      new Date(r.created_at).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }),
-        }));
+        const mapped = data.map(mapReview);
         setState((p) => ({ ...p, reviews: { ...p.reviews, [productId]: mapped } }));
         return mapped;
       }
@@ -373,14 +451,20 @@ export function AppProvider({ children }) {
           comment:    review.comment || "",
         }),
       });
+      // Refresh all reviews for seller if they're logged in
+      if (stateRef.current.sellerLoggedIn) {
+        loadAllReviewsFromDB();
+      }
     } catch {}
-  }, []);
+  }, [loadAllReviewsFromDB]);
 
   const canReview = useCallback(
     (productId) => {
       if (!state.user) return false;
       return state.transactions.some(
-        (t) => t.status === "Received" && t.items?.some((i) => Number(i.id) === Number(productId))
+        (t) =>
+          t.status === "Received" &&
+          t.items?.some((i) => Number(i.id) === Number(productId))
       );
     },
     [state.user, state.transactions]
@@ -394,6 +478,7 @@ export function AppProvider({ children }) {
       transactions:     state.transactions,
       wishlist:         state.wishlist,
       reviews:          state.reviews,
+      allReviews:       state.allReviews,
       inventory:        state.inventory,
       inventoryLoaded:  state.inventoryLoaded,
       storefront:       state.storefront,
@@ -404,6 +489,9 @@ export function AppProvider({ children }) {
       addTransaction, setTransactions, markReceived,
       toggleWishlist, isWishlisted,
       addReview, getProductReviews, getProductReviewsSync, canReview,
+      refreshSellerData,
+      loadAllOrdersFromDB,
+      loadAllReviewsFromDB,
     }}>
       {children}
     </AppContext.Provider>

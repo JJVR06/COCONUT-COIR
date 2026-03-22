@@ -18,6 +18,7 @@
   --font-body:    var(--font-body,    "Nunito", sans-serif);
   --ease-bounce:  cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-smooth:  cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring:  cubic-bezier(0.68, -0.55, 0.265, 1.55);
   --shadow-sm:    0 2px 8px  rgba(14,32,17,0.06);
   --shadow-md:    0 8px 28px rgba(14,32,17,0.10);
   --shadow-lg:    0 20px 56px rgba(14,32,17,0.14);
@@ -26,7 +27,7 @@
 
 /* ── RESET ─────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
 body {
   background: var(--tk-bg);
   color: var(--tk-dark);
@@ -47,6 +48,7 @@ main { animation: pageEnter 0.45s var(--ease-smooth) both; }
 
 /* ── KEYFRAMES ──────────────────────────────────────── */
 @keyframes fadeUp   { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+@keyframes fadeDown { from { opacity:0; transform:translateY(-12px); } to { opacity:1; transform:translateY(0); } }
 @keyframes fadeIn   { from { opacity:0; } to { opacity:1; } }
 @keyframes scaleIn  { from { opacity:0; transform:scale(0.92); } to { opacity:1; transform:scale(1); } }
 @keyframes bounceIn { 0%{opacity:0;transform:scale(0.88);} 60%{opacity:1;transform:scale(1.04);} 100%{transform:scale(1);} }
@@ -57,17 +59,49 @@ main { animation: pageEnter 0.45s var(--ease-smooth) both; }
 @keyframes skeletonShimmer { from{background-position:-400px 0;} to{background-position:400px 0;} }
 @keyframes toastIn  { from{transform:translateX(110%);opacity:0;} to{transform:translateX(0);opacity:1;} }
 @keyframes toastOut { from{transform:translateX(0);opacity:1;} to{transform:translateX(110%);opacity:0;} }
+@keyframes ripple   { from{transform:scale(0);opacity:0.4;} to{transform:scale(4);opacity:0;} }
+@keyframes heartBeat { 0%{transform:scale(1);} 14%{transform:scale(1.3);} 28%{transform:scale(1);} 42%{transform:scale(1.2);} 70%{transform:scale(1);} }
+@keyframes wiggle   { 0%,100%{transform:rotate(-3deg);} 50%{transform:rotate(3deg);} }
+@keyframes slideInRight { from{opacity:0;transform:translateX(20px);} to{opacity:1;transform:translateX(0);} }
+@keyframes slideInLeft  { from{opacity:0;transform:translateX(-20px);} to{opacity:1;transform:translateX(0);} }
+@keyframes zoomIn   { from{opacity:0;transform:scale(0.85);} to{opacity:1;transform:scale(1);} }
+@keyframes glowPulse { 0%,100%{opacity:1;} 50%{opacity:0.6;} }
 
 /* Animation helpers */
-.anim-fadeUp    { animation: fadeUp    0.5s var(--ease-smooth) both; }
-.anim-scaleIn   { animation: scaleIn   0.4s var(--ease-bounce) both; }
-.anim-bounceIn  { animation: bounceIn  0.5s var(--ease-bounce) both; }
-.anim-float     { animation: floatUp 3s ease-in-out infinite; }
+.anim-fadeUp      { animation: fadeUp      0.5s var(--ease-smooth) both; }
+.anim-fadeDown    { animation: fadeDown    0.4s var(--ease-smooth) both; }
+.anim-scaleIn     { animation: scaleIn     0.4s var(--ease-bounce) both; }
+.anim-bounceIn    { animation: bounceIn    0.5s var(--ease-bounce) both; }
+.anim-slideRight  { animation: slideInRight 0.4s var(--ease-smooth) both; }
+.anim-slideLeft   { animation: slideInLeft  0.4s var(--ease-smooth) both; }
+.anim-zoomIn      { animation: zoomIn      0.4s var(--ease-bounce) both; }
+.anim-float       { animation: floatUp 3s ease-in-out infinite; }
+.anim-glow-pulse  { animation: glowPulse 2s ease-in-out infinite; }
 /* legacy compat */
 .animate-fadeSlideUp { animation: fadeUp   0.5s var(--ease-smooth) both; }
 .animate-bounceIn    { animation: bounceIn 0.5s var(--ease-bounce) both; }
 .delay-1{animation-delay:0.05s;} .delay-2{animation-delay:0.10s;}
 .delay-3{animation-delay:0.15s;} .delay-4{animation-delay:0.20s;}
+.delay-5{animation-delay:0.25s;} .delay-6{animation-delay:0.30s;}
+
+/* ── RIPPLE EFFECT ──────────────────────────────────── */
+.tk-ripple {
+  position: relative;
+  overflow: hidden;
+}
+.tk-ripple::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.35);
+  width: 100%; height: 100%;
+  left: 0; top: 0;
+  transform: scale(0);
+  pointer-events: none;
+}
+.tk-ripple:active::after {
+  animation: ripple 0.5s ease-out forwards;
+}
 
 /* ── BUTTONS ────────────────────────────────────────── */
 .tk-btn-cta {
@@ -78,7 +112,7 @@ main { animation: pageEnter 0.45s var(--ease-smooth) both; }
   font-family: var(--font-display); font-weight: 800; font-size: 14px;
   border-radius: 999px; cursor: pointer; text-decoration: none;
   position: relative; overflow: hidden;
-  transition: transform 0.15s var(--ease-bounce), box-shadow 0.2s ease;
+  transition: transform 0.18s var(--ease-bounce), box-shadow 0.2s ease, filter 0.2s ease;
   box-shadow: var(--shadow-lime); white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
   min-height: 44px;
@@ -89,9 +123,13 @@ main { animation: pageEnter 0.45s var(--ease-smooth) both; }
   background-size: 300% 100%; background-position: -300% center;
   transition: background-position 0.7s ease;
 }
-.tk-btn-cta:hover { transform: scale(1.05) translateY(-2px); box-shadow: 0 10px 36px rgba(168,255,62,0.55); }
+.tk-btn-cta:hover {
+  transform: scale(1.06) translateY(-2px);
+  box-shadow: 0 12px 40px rgba(168,255,62,0.60);
+  filter: brightness(1.05);
+}
 .tk-btn-cta:hover::before { background-position: 300% center; }
-.tk-btn-cta:active { transform: scale(0.97); }
+.tk-btn-cta:active { transform: scale(0.96) translateY(0); box-shadow: var(--shadow-lime); }
 
 .tk-btn-outline-white {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -112,33 +150,49 @@ main { animation: pageEnter 0.45s var(--ease-smooth) both; }
   padding: 10px 22px;
   border-radius: 999px; font-family: var(--font-body); font-weight: 800; font-size: 13px;
   cursor: pointer; text-decoration: none;
-  transition: all 0.15s var(--ease-bounce); white-space: nowrap;
+  transition: all 0.18s var(--ease-bounce); white-space: nowrap;
   -webkit-tap-highlight-color: transparent; min-height: 40px;
+  position: relative; overflow: hidden;
 }
-.tk-btn-dark:hover  { background: var(--tk-forest); transform: scale(1.05); }
+.tk-btn-dark::after {
+  content: ""; position: absolute; inset: 0;
+  background: rgba(168,255,62,0.12);
+  opacity: 0; transition: opacity 0.2s;
+}
+.tk-btn-dark:hover  { background: var(--tk-forest); transform: scale(1.05) translateY(-1px); }
+.tk-btn-dark:hover::after { opacity: 1; }
 .tk-btn-dark:active { transform: scale(0.97); }
 
 /* ── PRODUCT CARD ───────────────────────────────────── */
 .tk-card {
   background: var(--tk-card); border-radius: 20px; overflow: hidden;
   box-shadow: var(--shadow-sm);
-  transition: transform 0.35s var(--ease-bounce), box-shadow 0.35s ease;
+  transition: transform 0.35s var(--ease-bounce), box-shadow 0.35s ease, border-color 0.2s;
   cursor: pointer; border: 1.5px solid transparent;
   -webkit-tap-highlight-color: transparent;
+  will-change: transform;
 }
-.tk-card:hover { transform: translateY(-8px) rotate(-0.5deg); box-shadow: var(--shadow-lg); border-color: var(--tk-lime-mid); }
-.tk-card:active { transform: translateY(-3px) scale(0.99); }
+.tk-card:hover {
+  transform: translateY(-10px) rotate(-0.5deg) scale(1.01);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--tk-lime-mid);
+}
+.tk-card:active { transform: translateY(-4px) scale(0.99); }
 .tk-card-img { transition: transform 0.5s var(--ease-smooth); }
-.tk-card:hover .tk-card-img { transform: scale(1.05); }
+.tk-card:hover .tk-card-img { transform: scale(1.07); }
 
 /* ── HEART ──────────────────────────────────────────── */
-.tk-heart { cursor: pointer; transition: transform 0.15s var(--ease-bounce); -webkit-tap-highlight-color: transparent; }
-.tk-heart:hover  { transform: scale(1.3);  }
-.tk-heart:active { transform: scale(0.85); }
+.tk-heart {
+  cursor: pointer;
+  transition: transform 0.2s var(--ease-spring);
+  -webkit-tap-highlight-color: transparent;
+}
+.tk-heart:hover  { transform: scale(1.35) rotate(5deg); }
+.tk-heart:active { animation: heartBeat 0.5s ease; }
 
 /* ── STAR ───────────────────────────────────────────── */
-.tk-star { cursor: pointer; display: inline-block; font-size: 26px; transition: transform 0.15s var(--ease-bounce); }
-.tk-star:hover  { transform: scale(1.35); }
+.tk-star { cursor: pointer; display: inline-block; font-size: 26px; transition: transform 0.18s var(--ease-bounce), filter 0.2s; }
+.tk-star:hover  { transform: scale(1.40) rotate(-5deg); filter: drop-shadow(0 2px 6px rgba(244,160,26,0.6)); }
 .tk-star:active { transform: scale(0.9);  }
 
 /* ── PILL ───────────────────────────────────────────── */
@@ -160,12 +214,14 @@ main { animation: pageEnter 0.45s var(--ease-smooth) both; }
   border: 2px solid var(--tk-dark); background: transparent;
   padding: 8px 20px; border-radius: 999px;
   font-family: var(--font-body); font-weight: 700; font-size: 12px;
-  cursor: pointer; transition: all 0.15s var(--ease-bounce);
+  cursor: pointer;
+  transition: all 0.18s var(--ease-bounce);
   color: var(--tk-dark); white-space: nowrap; min-height: 38px;
   -webkit-tap-highlight-color: transparent;
+  position: relative; overflow: hidden;
 }
 .tk-filter.active             { background: var(--tk-dark); color: var(--tk-lime); }
-.tk-filter:hover:not(.active) { background: var(--tk-lime-soft); transform: scale(1.04); }
+.tk-filter:hover:not(.active) { background: var(--tk-lime-soft); transform: scale(1.05) translateY(-1px); }
 .tk-filter:active             { transform: scale(0.97); }
 
 /* ── MODAL ──────────────────────────────────────────── */
@@ -191,11 +247,14 @@ main { animation: pageEnter 0.45s var(--ease-smooth) both; }
 .tk-toast.hiding { animation: toastOut 0.3s ease forwards; }
 
 /* ── INPUTS ─────────────────────────────────────────── */
-input, select, textarea { transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+input, select, textarea {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.1s ease;
+}
 input:focus, select:focus, textarea:focus {
   outline: none !important;
   border-color: var(--tk-lime) !important;
   box-shadow: 0 0 0 3px rgba(168,255,62,0.18) !important;
+  transform: translateY(-1px);
 }
 
 /* ── SKELETON ───────────────────────────────────────── */
@@ -221,18 +280,29 @@ input:focus, select:focus, textarea:focus {
 .tk-nav-link {
   padding: 8px 18px; border-radius: 999px; font-weight: 700; font-size: 14px;
   text-decoration: none; color: #666;
-  transition: all 0.15s var(--ease-bounce);
+  transition: all 0.18s var(--ease-bounce);
   border: 2px solid transparent; white-space: nowrap;
+  position: relative;
 }
-.tk-nav-link:hover { background: var(--tk-lime-soft); border-color: var(--tk-lime-mid); color: var(--tk-dark); transform: scale(1.03); }
+.tk-nav-link::after {
+  content: ""; position: absolute; bottom: 2px; left: 50%; right: 50%;
+  height: 2px; background: var(--tk-lime);
+  border-radius: 99px; transition: all 0.25s ease;
+}
+.tk-nav-link:hover { background: var(--tk-lime-soft); border-color: var(--tk-lime-mid); color: var(--tk-dark); transform: translateY(-1px); }
 .tk-nav-link.active { background: var(--tk-lime-soft); border-color: var(--tk-lime); color: var(--tk-dark); }
 
-/* ══════════════════════════════════════════════════════
-   RESPONSIVE — Mobile first
-   Breakpoints: 480 · 768 · 1024
-══════════════════════════════════════════════════════ */
+/* ── INTERACTIVE CARD (seller quick links etc.) ─────── */
+.tk-interactive-card {
+  transition: transform 0.22s var(--ease-bounce), box-shadow 0.22s ease, border-color 0.18s;
+}
+.tk-interactive-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+}
+.tk-interactive-card:active { transform: translateY(-1px) scale(0.99); }
 
-/* CONTAINER */
+/* ── RESPONSIVE CONTAINER ───────────────────────────── */
 .tk-container {
   width: 100%; max-width: 1280px;
   margin-left: auto; margin-right: auto;
@@ -242,19 +312,17 @@ input:focus, select:focus, textarea:focus {
 @media (min-width: 768px)  { .tk-container { padding-left: 32px; padding-right: 32px; } }
 @media (min-width: 1024px) { .tk-container { padding-left: 48px; padding-right: 48px; } }
 
-/* SECTION PADDING */
 .tk-section { padding: 36px 16px; }
 @media (min-width: 480px)  { .tk-section { padding: 44px 20px; } }
 @media (min-width: 768px)  { .tk-section { padding: 56px 32px; } }
 @media (min-width: 1024px) { .tk-section { padding: 72px 48px; } }
 
-/* HERO PADDING */
 .tk-hero { padding: 56px 16px 80px; }
 @media (min-width: 480px)  { .tk-hero { padding: 64px 24px 90px;  } }
 @media (min-width: 768px)  { .tk-hero { padding: 80px 48px 110px; } }
 @media (min-width: 1024px) { .tk-hero { padding: 100px 64px 130px; } }
 
-/* PRODUCT GRID — 2 col mobile → 3 tablet → 4 desktop */
+/* ── PRODUCT GRID ───────────────────────────────────── */
 .tk-grid-products {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -264,34 +332,81 @@ input:focus, select:focus, textarea:focus {
 @media (min-width: 768px)  { .tk-grid-products { grid-template-columns: repeat(3, 1fr); gap: 18px; } }
 @media (min-width: 1024px) { .tk-grid-products { grid-template-columns: repeat(4, 1fr); gap: 22px; } }
 
-/* TYPOGRAPHY */
+/* ── TYPOGRAPHY ─────────────────────────────────────── */
 .tk-h1 { font-family:var(--font-display); font-weight:800; font-size:clamp(28px,7vw,72px); line-height:1.0; letter-spacing:-1px; }
 .tk-h2 { font-family:var(--font-display); font-weight:800; font-size:clamp(22px,4vw,44px); line-height:1.1; letter-spacing:-0.5px; }
 .tk-h3 { font-family:var(--font-display); font-weight:700; font-size:clamp(18px,3vw,28px); line-height:1.25; }
 
 /* ── SHOW/HIDE ──────────────────────────────────────── */
-/*
-  These use !important so they can't be overridden by inline styles.
-  .desktop-only = hidden on mobile, shown on ≥768px
-  .mobile-only  = shown on mobile, hidden on ≥768px
-*/
 .desktop-only { display: none !important; }
 @media (min-width: 768px) { .desktop-only { display: flex !important; } }
-
 .mobile-only  { display: flex !important; }
 @media (min-width: 768px) { .mobile-only  { display: none !important; } }
 
-/* ── CHECKOUT GRID ──────────────────────────────────── */
+/* ── CHECKOUT / PROFILE GRIDS ───────────────────────── */
 .checkout-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
 @media (min-width: 768px) { .checkout-grid { grid-template-columns: 1fr 300px; } }
 @media (min-width: 1024px) { .checkout-grid { grid-template-columns: 1fr 340px; } }
 
-/* ── PROFILE GRID ───────────────────────────────────── */
 .profile-info-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
 @media (min-width: 600px) { .profile-info-grid { grid-template-columns: 1fr 1fr; } }
+
+/* ── MOBILE TOUCH IMPROVEMENTS ──────────────────────── */
+@media (max-width: 767px) {
+  /* Larger tap targets on mobile */
+  button, a, [role="button"] { min-height: 44px; }
+
+  /* Smoother scrolling feel */
+  * { -webkit-overflow-scrolling: touch; }
+
+  /* Prevent text size adjustment on orientation change */
+  html { -webkit-text-size-adjust: 100%; }
+
+  /* Better focus ring for accessibility */
+  :focus-visible { outline: 3px solid #A8FF3E; outline-offset: 3px; }
+}
+
+/* ── TABLET SPECIFIC ────────────────────────────────── */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .tk-grid-products { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+}
+
+/* ── CARD HOVER ON MOBILE (tap state) ───────────────── */
+@media (hover: none) {
+  /* On touch devices, use active state instead of hover */
+  .tk-card:active {
+    transform: translateY(-4px) scale(0.99);
+    box-shadow: var(--shadow-md);
+    border-color: var(--tk-lime-mid);
+  }
+  .tk-btn-cta:active { transform: scale(0.96); }
+  .tk-btn-dark:active { transform: scale(0.97); }
+}
+
+/* ── REDUCED MOTION ─────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  main { animation: none; }
+}
 
 /* ── PRINT ──────────────────────────────────────────── */
 @media print {
   nav, aside, .no-print { display: none !important; }
   main { padding: 0 !important; }
 }
+
+/* ── SELECTION COLOR ────────────────────────────────── */
+::selection {
+  background: rgba(168,255,62,0.3);
+  color: #0E2011;
+}
+
+/* ── SMOOTH IMAGE LOADING ───────────────────────────── */
+img {
+  transition: opacity 0.3s ease;
+}
+img[src=""] { opacity: 0; }

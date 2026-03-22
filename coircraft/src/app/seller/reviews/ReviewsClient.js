@@ -2,7 +2,7 @@
 import { useState } from "react";
 import SellerSidebar from "@/components/SellerSidebar";
 import { useApp } from "@/context/AppContext";
-import { Star, Filter, TrendingUp, MessageSquare, Award } from "lucide-react";
+import { Star, Filter, TrendingUp, MessageSquare, Award, RefreshCw } from "lucide-react";
 
 const STAR_COLORS = ["", "#E74C3C", "#FF8C00", "#F4A01A", "#2ECC71", "#1A7A2E"];
 
@@ -22,40 +22,49 @@ function StarRow({ rating, size = 16 }) {
 }
 
 export default function ReviewsClient() {
-  const { reviews, inventory, sellerLoggedIn } = useApp();
+  // Use allReviews (flat array loaded for seller) instead of reviews (per-product map)
+  const { allReviews, inventory, sellerLoggedIn, refreshSellerData } = useApp();
 
-  const [filterRating,  setFilterRating]  = useState(0);   // 0 = all
+  const [filterRating,  setFilterRating]  = useState(0);
   const [filterProduct, setFilterProduct] = useState("all");
   const [sortBy,        setSortBy]        = useState("newest");
+  const [refreshing,    setRefreshing]    = useState(false);
 
   if (!sellerLoggedIn) {
     if (typeof window !== "undefined") window.location.href = "/login";
     return null;
   }
 
-  const allReviews = Array.isArray(reviews) ? reviews : [];
-  const products   = Array.isArray(inventory) ? inventory : [];
+  const products  = Array.isArray(inventory) ? inventory : [];
+  // allReviews is already a flat array from the context
+  const allRvws   = Array.isArray(allReviews) ? allReviews : [];
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refreshSellerData();
+    setTimeout(() => setRefreshing(false), 600);
+  };
 
   /* ── Stats ── */
-  const totalReviews  = allReviews.length;
+  const totalReviews  = allRvws.length;
   const avgRating     = totalReviews
-    ? (allReviews.reduce((s, r) => s + r.rating, 0) / totalReviews).toFixed(1)
+    ? (allRvws.reduce((s, r) => s + r.rating, 0) / totalReviews).toFixed(1)
     : 0;
   const ratingCounts  = [5, 4, 3, 2, 1].map((n) => ({
     n,
-    count: allReviews.filter((r) => r.rating === n).length,
+    count: allRvws.filter((r) => r.rating === n).length,
   }));
 
   /* ── Unique products that have reviews ── */
-  const reviewedProductIds = [...new Set(allReviews.map((r) => r.productId))];
+  const reviewedProductIds = [...new Set(allRvws.map((r) => r.productId))];
   const productOptions     = reviewedProductIds.map((id) => {
-    const p = products.find((p) => p.id === id);
+    const p = products.find((p) => String(p.id) === String(id));
     return { id, name: p?.name ?? `Product #${id}` };
   });
 
   /* ── Per-product average ── */
   const productStats = productOptions.map(({ id, name }) => {
-    const pRevs = allReviews.filter((r) => r.productId === id);
+    const pRevs = allRvws.filter((r) => String(r.productId) === String(id));
     const avg   = pRevs.length
       ? (pRevs.reduce((s, r) => s + r.rating, 0) / pRevs.length).toFixed(1)
       : "—";
@@ -63,8 +72,8 @@ export default function ReviewsClient() {
   }).sort((a, b) => b.count - a.count);
 
   /* ── Filter + sort ── */
-  let filtered = [...allReviews];
-  if (filterRating > 0)    filtered = filtered.filter((r) => r.rating === filterRating);
+  let filtered = [...allRvws];
+  if (filterRating > 0)        filtered = filtered.filter((r) => r.rating === filterRating);
   if (filterProduct !== "all") filtered = filtered.filter((r) => String(r.productId) === filterProduct);
   if (sortBy === "newest")     filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
   if (sortBy === "oldest")     filtered.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -72,7 +81,7 @@ export default function ReviewsClient() {
   if (sortBy === "lowest")     filtered.sort((a, b) => a.rating - b.rating);
 
   const getProductName = (id) => {
-    const p = products.find((p) => p.id === id);
+    const p = products.find((p) => String(p.id) === String(id));
     return p?.name ?? `Product #${id}`;
   };
 
@@ -94,24 +103,45 @@ export default function ReviewsClient() {
           @media (max-width: 600px) {
             .reviews-stats-cards { grid-template-columns: 1fr !important; }
           }
+          @keyframes spin { to { transform: rotate(360deg); } }
+          .refresh-spin { animation: spin 0.6s linear infinite; }
         `}</style>
 
         {/* Page header */}
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(20px,3vw,26px)", fontWeight: 800, color: "#0E2011", margin: "0 0 4px" }}>
-            ⭐ Customer Reviews
-          </h1>
-          <p style={{ color: "#888", fontSize: 13, margin: 0 }}>
-            All reviews left by buyers after receiving their orders.
-          </p>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(20px,3vw,26px)", fontWeight: 800, color: "#0E2011", margin: "0 0 4px" }}>
+              ⭐ Customer Reviews
+            </h1>
+            <p style={{ color: "#888", fontSize: 13, margin: 0 }}>
+              All reviews left by buyers after receiving their orders. Auto-refreshes every 30 s.
+            </p>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            style={{
+              display: "flex", alignItems: "center", gap: 7,
+              background: "#fff", border: "2px solid #E8EDE8",
+              borderRadius: 50, padding: "9px 18px",
+              fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 12,
+              cursor: refreshing ? "not-allowed" : "pointer", color: "#555",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#A8FF3E"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#E8EDE8"; }}
+          >
+            <RefreshCw size={14} className={refreshing ? "refresh-spin" : ""} />
+            {refreshing ? "Refreshing…" : "Refresh Now"}
+          </button>
         </div>
 
         {/* ── Overview cards ── */}
         <div className="reviews-stats-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 24 }}>
           {[
-            { icon: MessageSquare, label: "Total Reviews", value: totalReviews, color: "#1A7A2E", bg: "#E8FFD0" },
-            { icon: TrendingUp,    label: "Average Rating", value: avgRating > 0 ? `${avgRating} / 5` : "—", color: "#856404", bg: "#FFF9C4" },
-            { icon: Award,         label: "Products Reviewed", value: reviewedProductIds.length, color: "#1E40AF", bg: "#DBEAFE" },
+            { icon: MessageSquare, label: "Total Reviews",     value: totalReviews,                          color: "#1A7A2E", bg: "#E8FFD0" },
+            { icon: TrendingUp,    label: "Average Rating",    value: avgRating > 0 ? `${avgRating} / 5` : "—", color: "#856404", bg: "#FFF9C4" },
+            { icon: Award,         label: "Products Reviewed", value: reviewedProductIds.length,             color: "#1E40AF", bg: "#DBEAFE" },
           ].map(({ icon: Icon, label, value, color, bg }) => (
             <div key={label} style={{ background: "#fff", borderRadius: 16, padding: "18px", boxShadow: "0 2px 12px rgba(14,32,17,0.06)" }}>
               <div style={{ width: 40, height: 40, background: bg, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
@@ -123,7 +153,7 @@ export default function ReviewsClient() {
           ))}
         </div>
 
-        {/* ── Two-column layout: rating breakdown + product breakdown ── */}
+        {/* ── Two-column layout ── */}
         <div className="reviews-top-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
           {/* Rating breakdown */}
           <div style={{ background: "#fff", borderRadius: 16, padding: "20px", boxShadow: "0 2px 12px rgba(14,32,17,0.06)" }}>
@@ -148,11 +178,7 @@ export default function ReviewsClient() {
                     {n} <Star size={12} fill="#F4A01A" color="#F4A01A" />
                   </button>
                   <div style={{ flex: 1, height: 8, background: "#F0F0EC", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{
-                      height: "100%", width: `${pct}%`,
-                      background: STAR_COLORS[n] || "#A8FF3E",
-                      borderRadius: 99, transition: "width 0.5s ease",
-                    }} />
+                    <div style={{ height: "100%", width: `${pct}%`, background: STAR_COLORS[n] || "#A8FF3E", borderRadius: 99, transition: "width 0.5s ease" }} />
                   </div>
                   <span style={{ fontSize: 12, color: "#888", flexShrink: 0, width: 32, textAlign: "right" }}>{count}</span>
                 </div>
@@ -170,19 +196,10 @@ export default function ReviewsClient() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {productStats.slice(0, 5).map(({ id, name, avg, count }) => (
-                  <div
-                    key={id}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}
-                  >
+                  <div key={id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                     <button
                       onClick={() => setFilterProduct(filterProduct === String(id) ? "all" : String(id))}
-                      style={{
-                        background: "none", border: "none", cursor: "pointer",
-                        textAlign: "left", fontFamily: "var(--font-body)",
-                        fontWeight: 700, fontSize: 12, color: filterProduct === String(id) ? "#1A7A2E" : "#0E2011",
-                        padding: 0, flex: 1, minWidth: 0,
-                        textDecoration: filterProduct === String(id) ? "underline" : "none",
-                      }}
+                      style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 12, color: filterProduct === String(id) ? "#1A7A2E" : "#0E2011", padding: 0, flex: 1, minWidth: 0, textDecoration: filterProduct === String(id) ? "underline" : "none" }}
                     >
                       {name}
                     </button>
@@ -266,27 +283,22 @@ export default function ReviewsClient() {
               <div
                 key={i}
                 style={{
-                  background: "#fff", borderRadius: 16,
-                  padding: "18px 20px",
+                  background: "#fff", borderRadius: 16, padding: "18px 20px",
                   boxShadow: "0 2px 12px rgba(14,32,17,0.06)",
                   border: review.rating >= 4
                     ? "1px solid #E8FFD0"
                     : review.rating <= 2
                     ? "1px solid #FFE4E6"
                     : "1px solid #F0F0EC",
+                  transition: "transform 0.2s, box-shadow 0.2s",
                 }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(14,32,17,0.10)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 2px 12px rgba(14,32,17,0.06)"; }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                      {/* Avatar */}
-                      <div style={{
-                        width: 36, height: 36, borderRadius: "50%",
-                        background: "linear-gradient(135deg,#A8FF3E,#1A472A)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: "#0E2011", fontWeight: 800, fontSize: 14,
-                        fontFamily: "var(--font-display)", flexShrink: 0,
-                      }}>
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg,#A8FF3E,#1A472A)", display: "flex", alignItems: "center", justifyContent: "center", color: "#0E2011", fontWeight: 800, fontSize: 14, fontFamily: "var(--font-display)", flexShrink: 0 }}>
                         {(review.author || "?")[0].toUpperCase()}
                       </div>
                       <div>
@@ -296,26 +308,14 @@ export default function ReviewsClient() {
                     </div>
                     <StarRow rating={review.rating} size={15} />
                   </div>
-
-                  {/* Product badge */}
-                  <div style={{
-                    background: "#F5F9F0", border: "1px solid #E8FFD0",
-                    borderRadius: 10, padding: "6px 12px",
-                    fontSize: 11, fontWeight: 700, color: "#1A7A2E",
-                    maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}>
+                  <div style={{ background: "#F5F9F0", border: "1px solid #E8FFD0", borderRadius: 10, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: "#1A7A2E", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     🌿 {getProductName(review.productId)}
                   </div>
                 </div>
-
                 {review.comment ? (
-                  <p style={{ fontSize: 13, color: "#444", lineHeight: 1.7, margin: 0 }}>
-                    &ldquo;{review.comment}&rdquo;
-                  </p>
+                  <p style={{ fontSize: 13, color: "#444", lineHeight: 1.7, margin: 0 }}>&ldquo;{review.comment}&rdquo;</p>
                 ) : (
-                  <p style={{ fontSize: 12, color: "#ccc", fontStyle: "italic", margin: 0 }}>
-                    No written comment.
-                  </p>
+                  <p style={{ fontSize: 12, color: "#ccc", fontStyle: "italic", margin: 0 }}>No written comment.</p>
                 )}
               </div>
             ))}

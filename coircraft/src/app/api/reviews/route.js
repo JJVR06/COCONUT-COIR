@@ -1,10 +1,20 @@
 import { sql } from "@/lib/db";
 import { NextResponse } from "next/server";
 
-// GET reviews for a product
+// GET reviews — all reviews when all=true (seller), or per product
 export async function GET(req) {
   try {
     const productId = req.nextUrl.searchParams.get("productId");
+    const all       = req.nextUrl.searchParams.get("all");
+
+    if (all === "true") {
+      // Seller fetches every review across all products
+      const reviews = await sql`
+        SELECT * FROM reviews ORDER BY created_at DESC
+      `;
+      return NextResponse.json(reviews);
+    }
+
     if (!productId) return NextResponse.json([]);
 
     const reviews = await sql`

@@ -1,11 +1,14 @@
 "use client";
 import { useApp } from "@/context/AppContext";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import SellerSidebar from "@/components/SellerSidebar";
+import { RefreshCw } from "lucide-react";
 
 export default function DashboardClient() {
-  const { sellerLoggedIn, transactions, inventory, reviews } = useApp();
+  const { sellerLoggedIn, transactions, inventory, allReviews, refreshSellerData } = useApp();
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(null);
 
   useEffect(() => {
     if (!sellerLoggedIn) window.location.href = "/login";
@@ -13,17 +16,25 @@ export default function DashboardClient() {
 
   if (!sellerLoggedIn) return null;
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refreshSellerData();
+    setLastRefresh(new Date());
+    setTimeout(() => setRefreshing(false), 600);
+  };
+
   const txList  = Array.isArray(transactions) ? transactions : [];
   const revenue = txList
     .filter((t) => t.status !== "Cancelled")
     .reduce((s, t) => s + (t.total || 0), 0);
   const pending  = txList.filter((t) => t.status === "Pending").length;
   const done     = txList.filter((t) => ["Delivered", "Received"].includes(t.status)).length;
-  const recent   = [...txList].reverse().slice(0, 6);
+  const recent   = [...txList].slice(0, 6);
 
   const totalProducts = Array.isArray(inventory) ? inventory.length : 0;
   const lowStock      = Array.isArray(inventory) ? inventory.filter((p) => p.stock > 0 && p.stock < 10).length : 0;
-  const totalReviews  = Array.isArray(reviews) ? reviews.length : 0;
+  // Use allReviews (flat array) for seller dashboard
+  const totalReviews  = Array.isArray(allReviews) ? allReviews.length : 0;
 
   const sColor = {
     Pending:   ["#FFF9C4", "#856404"],
@@ -45,7 +56,6 @@ export default function DashboardClient() {
           background: "#F8F9FA",
           padding: 32,
           overflowY: "auto",
-          /* On mobile, push content below fixed mobile header */
           paddingTop: "var(--seller-mobile-header-offset, 32px)",
         }}
       >
@@ -59,51 +69,72 @@ export default function DashboardClient() {
           @media (max-width: 479px) {
             .seller-stats-grid { grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
           }
+          @keyframes spin { to { transform: rotate(360deg); } }
+          .refresh-spin { animation: spin 0.6s linear infinite; }
+          .stat-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 18px 16px;
+            box-shadow: 0 2px 12px rgba(14,32,17,0.06);
+            transition: transform 0.2s, box-shadow 0.2s;
+            cursor: default;
+          }
+          .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(14,32,17,0.10);
+          }
         `}</style>
 
         {/* Header */}
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{
-            fontFamily: "var(--font-display)", fontSize: "clamp(22px,4vw,28px)",
-            fontWeight: 800, color: "#0E2011", margin: "0 0 4px",
-          }}>
-            Dashboard
-          </h1>
-          <p style={{ color: "#888", fontSize: 14, margin: 0 }}>Welcome back, Admin!</p>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 14 }}>
+          <div>
+            <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(22px,4vw,28px)", fontWeight: 800, color: "#0E2011", margin: "0 0 4px" }}>
+              Dashboard
+            </h1>
+            <p style={{ color: "#888", fontSize: 13, margin: 0 }}>
+              Welcome back, Admin!
+              {lastRefresh && (
+                <span style={{ marginLeft: 8, color: "#bbb" }}>
+                  · Last refreshed {lastRefresh.toLocaleTimeString()}
+                </span>
+              )}
+            </p>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            style={{
+              display: "flex", alignItems: "center", gap: 7,
+              background: "#fff", border: "2px solid #E8EDE8",
+              borderRadius: 50, padding: "9px 18px",
+              fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 12,
+              cursor: refreshing ? "not-allowed" : "pointer", color: "#555",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#A8FF3E"; e.currentTarget.style.color = "#0E2011"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#E8EDE8"; e.currentTarget.style.color = "#555"; }}
+          >
+            <RefreshCw size={14} className={refreshing ? "refresh-spin" : ""} />
+            {refreshing ? "Refreshing…" : "Refresh Data"}
+          </button>
         </div>
 
         {/* ── Stat cards ── */}
         <div
           className="seller-stats-grid"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-            gap: 14,
-            marginBottom: 24,
-          }}
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 14, marginBottom: 24 }}
         >
           {[
             { icon: "💰", label: "Total Revenue",   value: `₱${revenue.toLocaleString()}`, sub: "Confirmed orders",  accent: "#A8FF3E" },
-            { icon: "📦", label: "Total Orders",    value: txList.length,                   sub: "All time",          accent: "#93C5FD" },
-            { icon: "🕐", label: "Pending Orders",  value: pending,                         sub: "Need action",       accent: "#FCD34D" },
-            { icon: "✅", label: "Completed",       value: done,                            sub: "Delivered / Rcvd",  accent: "#6EE7B7" },
-            { icon: "📋", label: "Products",        value: totalProducts,                   sub: `${lowStock} low stock`, accent: "#F9A8D4" },
-            { icon: "⭐", label: "Reviews",         value: totalReviews,                    sub: "From buyers",       accent: "#FDE68A" },
+            { icon: "📦", label: "Total Orders",    value: txList.length,                  sub: "All buyers",        accent: "#93C5FD" },
+            { icon: "🕐", label: "Pending Orders",  value: pending,                        sub: "Need action",       accent: "#FCD34D" },
+            { icon: "✅", label: "Completed",       value: done,                           sub: "Delivered / Rcvd",  accent: "#6EE7B7" },
+            { icon: "📋", label: "Products",        value: totalProducts,                  sub: `${lowStock} low stock`, accent: "#F9A8D4" },
+            { icon: "⭐", label: "Reviews",         value: totalReviews,                   sub: "From buyers",       accent: "#FDE68A" },
           ].map(({ icon, label, value, sub, accent }) => (
-            <div
-              key={label}
-              style={{
-                background: "#fff", borderRadius: 16,
-                padding: "18px 16px",
-                boxShadow: "0 2px 12px rgba(14,32,17,0.06)",
-                borderLeft: `4px solid ${accent}`,
-              }}
-            >
+            <div key={label} className="stat-card" style={{ borderLeft: `4px solid ${accent}` }}>
               <div style={{ fontSize: 24, marginBottom: 8 }}>{icon}</div>
-              <div style={{
-                fontFamily: "var(--font-display)", fontSize: "clamp(20px,3vw,26px)",
-                fontWeight: 800, color: "#0E2011", marginBottom: 3,
-              }}>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: "clamp(20px,3vw,26px)", fontWeight: 800, color: "#0E2011", marginBottom: 3 }}>
                 {value}
               </div>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#555", marginBottom: 2 }}>{label}</div>
@@ -113,10 +144,7 @@ export default function DashboardClient() {
         </div>
 
         {/* ── Quick links ── */}
-        <div
-          className="seller-quick-links"
-          style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}
-        >
+        <div className="seller-quick-links" style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
           {[
             { href: "/seller/inventory",  icon: "📋", label: "Manage Inventory" },
             { href: "/seller/orders",     icon: "📦", label: "View Orders"      },
@@ -131,11 +159,11 @@ export default function DashboardClient() {
                 background: "#fff", border: "2px solid #E8EDE8",
                 borderRadius: 12, padding: "10px 16px",
                 textDecoration: "none", fontWeight: 700,
-                fontSize: 12, color: "#0E2011", transition: "all 0.15s",
+                fontSize: 12, color: "#0E2011", transition: "all 0.18s",
                 whiteSpace: "nowrap",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#A8FF3E"; e.currentTarget.style.background = "#F5F9F0"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#E8EDE8"; e.currentTarget.style.background = "#fff"; }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#A8FF3E"; e.currentTarget.style.background = "#F5F9F0"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#E8EDE8"; e.currentTarget.style.background = "#fff"; e.currentTarget.style.transform = "translateY(0)"; }}
             >
               {icon} {label}
             </Link>
@@ -145,19 +173,14 @@ export default function DashboardClient() {
         {/* ── Recent orders ── */}
         <div style={{ background: "#fff", borderRadius: 18, padding: "22px", boxShadow: "0 2px 12px rgba(14,32,17,0.06)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-            <h2 style={{
-              fontFamily: "var(--font-display)", fontWeight: 800,
-              fontSize: "clamp(15px,2.5vw,18px)", color: "#0E2011", margin: 0,
-            }}>
+            <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "clamp(15px,2.5vw,18px)", color: "#0E2011", margin: 0 }}>
               Recent Orders
             </h2>
             <Link
               href="/seller/orders"
-              style={{
-                fontSize: 12, fontWeight: 700, color: "#1A7A2E",
-                textDecoration: "none", border: "2px solid #E8EDE8",
-                borderRadius: 50, padding: "6px 14px", whiteSpace: "nowrap",
-              }}
+              style={{ fontSize: 12, fontWeight: 700, color: "#1A7A2E", textDecoration: "none", border: "2px solid #E8EDE8", borderRadius: 50, padding: "6px 14px", whiteSpace: "nowrap", transition: "all 0.18s" }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#A8FF3E"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#E8EDE8"; }}
             >
               View All →
             </Link>
@@ -173,15 +196,8 @@ export default function DashboardClient() {
               <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", minWidth: 520 }}>
                 <thead>
                   <tr style={{ background: "#F5F9F0" }}>
-                    {["Order ID", "Date", "Payment", "Total", "Status"].map((h) => (
-                      <th
-                        key={h}
-                        style={{
-                          textAlign: "left", padding: "10px 14px",
-                          color: "#1A7A2E", fontWeight: 700, fontSize: 11,
-                          letterSpacing: 1, textTransform: "uppercase", whiteSpace: "nowrap",
-                        }}
-                      >
+                    {["Order ID", "Buyer", "Date", "Payment", "Total", "Status"].map((h) => (
+                      <th key={h} style={{ textAlign: "left", padding: "10px 14px", color: "#1A7A2E", fontWeight: 700, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", whiteSpace: "nowrap" }}>
                         {h}
                       </th>
                     ))}
@@ -191,17 +207,16 @@ export default function DashboardClient() {
                   {recent.map((tx) => {
                     const [bg, color] = sColor[tx.status] || ["#F5F5F5", "#555"];
                     return (
-                      <tr key={tx.id} style={{ borderBottom: "1px solid #F0F0EC" }}>
+                      <tr key={tx.id} style={{ borderBottom: "1px solid #F0F0EC", transition: "background 0.15s" }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "#FAFFF5"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
                         <td style={{ padding: "11px 14px", fontWeight: 700, color: "#1A7A2E", whiteSpace: "nowrap" }}>{tx.id}</td>
+                        <td style={{ padding: "11px 14px", color: "#666", fontSize: 12 }}>{tx.user_email || "—"}</td>
                         <td style={{ padding: "11px 14px", color: "#888", whiteSpace: "nowrap" }}>{tx.date}</td>
                         <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>{tx.method}</td>
                         <td style={{ padding: "11px 14px", fontWeight: 700, whiteSpace: "nowrap" }}>₱{(tx.total || 0).toLocaleString()}</td>
                         <td style={{ padding: "11px 14px" }}>
-                          <span style={{
-                            background: bg, color,
-                            borderRadius: 50, padding: "4px 12px",
-                            fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
-                          }}>
+                          <span style={{ background: bg, color, borderRadius: 50, padding: "4px 12px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
                             {tx.status}
                           </span>
                         </td>
@@ -214,7 +229,6 @@ export default function DashboardClient() {
           )}
         </div>
 
-        {/* Mobile bottom spacer */}
         <div className="seller-mobile-bottom-spacer" />
       </main>
     </div>
