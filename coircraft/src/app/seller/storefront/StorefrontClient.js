@@ -2,8 +2,24 @@
 import { useState, useEffect } from "react";
 import SellerSidebar from "@/components/SellerSidebar";
 import { useApp } from "@/context/AppContext";
-import { defaultStorefront } from "@/context/AppContext";
 import { Save, Eye, RefreshCw, Megaphone, Image as ImageIcon, Info, ToggleLeft, ToggleRight } from "lucide-react";
+
+
+
+const defaultStorefront = {
+  heroTitle:        "Premium Philippine\nCoconut Coir Products",
+  heroSubtitle:     "Eco-friendly, sustainably sourced from the Philippines.",
+  announcement:     "",
+  tagline:          "Premium eco-friendly coconut coir products made with love by Filipino artisans.",
+  name:             "CoirCraft Philippines",
+  address:          "123 Coir Avenue, Quezon City, Metro Manila",
+  hours:            "Mon–Sat: 8:00 AM – 6:00 PM",
+  contactEmail:     "InnoBytes@coircraft.ph",
+  contactPhone:     "+63 912 345 6789",
+  showFeatured:     true,
+  showNewArrivals:  true,
+  showTestimonials: true,
+};
 
 const SECTIONS = [
   { key: "heroTitle",     label: "Hero Title",        type: "textarea", help: "Main heading on home page (use \\n for line break)" },
