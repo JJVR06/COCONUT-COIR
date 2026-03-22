@@ -4,6 +4,7 @@ import { ShoppingCart, Heart, User, LogOut, Menu, X } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import CoirCraftLogo from "@/components/CoirCraftLogo";
 
 export default function Navbar() {
   const { user, setUser, cart, wishlist } = useApp();
@@ -47,11 +48,6 @@ export default function Navbar() {
         transition: "all 0.3s ease",
         fontFamily: "var(--font-body)",
       }}>
-        {/*
-          3-column grid: logo | center-nav | actions
-          The mobile actions div is explicitly placed in column 3 via gridColumn
-          so it doesn't fall into a phantom 4th column when desktop items are hidden.
-        */}
         <div style={{
           width: "100%",
           padding: "0 16px",
@@ -66,42 +62,18 @@ export default function Navbar() {
           <Link
             href="/"
             style={{
-              display: "flex", alignItems: "center", gap: 10,
+              display: "flex", alignItems: "center",
               textDecoration: "none", justifySelf: "start",
               minWidth: 0, gridColumn: 1,
+              transition: "opacity 0.18s, transform 0.18s",
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; e.currentTarget.style.transform = "scale(1.02)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1";    e.currentTarget.style.transform = "scale(1)"; }}
           >
-            <div
-              style={{
-                background: "linear-gradient(135deg,#A8FF3E,#1A472A)",
-                borderRadius: 13, width: 40, height: 40,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 20, boxShadow: "0 4px 14px rgba(168,255,62,0.35)",
-                flexShrink: 0, transition: "transform 0.2s",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.transform = "rotate(-6deg) scale(1.08)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; }}
-            >
-              🥥
-            </div>
-            <div style={{ lineHeight: 1, minWidth: 0 }}>
-              <div style={{
-                fontFamily: "var(--font-display)", fontWeight: 800,
-                fontSize: 19, color: "#0E2011", letterSpacing: "-0.4px",
-                whiteSpace: "nowrap",
-              }}>
-                Coir<span style={{ color: "#1A7A2E" }}>Craft</span>
-              </div>
-              <div style={{
-                fontSize: 9, letterSpacing: "2.5px", color: "#1A7A2E",
-                fontWeight: 700, textTransform: "uppercase", marginTop: 1,
-              }}>
-                Philippines
-              </div>
-            </div>
+            <CoirCraftLogo size={40} dark={false} showText={true} />
           </Link>
 
-          {/* ── COL 2: Nav links — desktop only, truly centered ── */}
+          {/* ── COL 2: Nav links — desktop only ── */}
           <div
             className="desktop-only"
             style={{ display: "flex", alignItems: "center", gap: 4, gridColumn: 2 }}
@@ -213,22 +185,16 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* ── COL 3: Mobile cart + hamburger ──
-              gridColumn: 3 is CRITICAL — forces this div into column 3
-              even when the desktop divs above are display:none.
-              Without it, CSS grid places this as the 2nd child → col 2 (center),
-              which is why the icons were floating in the middle of the screen.
-          ── */}
+          {/* ── COL 3: Mobile cart + hamburger ── */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: 8,
-              justifySelf: "end",   /* flush to right edge of col 3 */
-              gridColumn: 3,        /* always occupy column 3 */
+              justifySelf: "end",
+              gridColumn: 3,
             }}
           >
-            {/* Only show on mobile via media query */}
             <style>{`
               .nb-mobile-actions { display: flex !important; }
               @media (min-width: 768px) { .nb-mobile-actions { display: none !important; } }
@@ -242,7 +208,10 @@ export default function Navbar() {
                     width: 42, height: 42, display: "flex", alignItems: "center",
                     justifyContent: "center", textDecoration: "none",
                     flexShrink: 0, WebkitTapHighlightColor: "transparent",
+                    transition: "transform 0.18s",
                   }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.06)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
                 >
                   <ShoppingCart size={17} color="#A8FF3E" />
                   {cartCount > 0 && (
@@ -268,8 +237,10 @@ export default function Navbar() {
                   width: 46, height: 46, cursor: "pointer", color: "#A8FF3E",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   flexShrink: 0, WebkitTapHighlightColor: "transparent",
-                  touchAction: "manipulation",
+                  touchAction: "manipulation", transition: "transform 0.18s",
                 }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.06)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
               >
                 {menuOpen ? <X size={22} /> : <Menu size={22} />}
               </button>
@@ -308,16 +279,15 @@ export default function Navbar() {
         fontFamily: "var(--font-body)",
         willChange: "transform",
       }}>
-        {/* Header */}
+        {/* Drawer header */}
         <div style={{
-          padding: "20px 20px 16px",
+          padding: "16px 20px",
           borderBottom: "1px solid rgba(168,255,62,0.1)",
           display: "flex", alignItems: "center", justifyContent: "space-between",
           flexShrink: 0,
         }}>
-          <div style={{ fontFamily: "var(--font-display)", color: "#fff", fontWeight: 800, fontSize: 18 }}>
-            Coir<span style={{ color: "#A8FF3E" }}>Craft</span>
-          </div>
+          {/* Logo in drawer — icon only on small space */}
+          <CoirCraftLogo size={36} dark={true} showText={true} />
           <button
             onClick={() => setMenuOpen(false)}
             style={{
@@ -326,7 +296,10 @@ export default function Navbar() {
               cursor: "pointer", color: "rgba(255,255,255,0.8)",
               display: "flex", alignItems: "center", justifyContent: "center",
               WebkitTapHighlightColor: "transparent", touchAction: "manipulation",
+              transition: "all 0.18s",
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(168,255,62,0.15)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
           >
             <X size={18} />
           </button>
@@ -348,6 +321,7 @@ export default function Navbar() {
                   fontWeight: 700, fontSize: 16,
                   border: `1px solid ${active ? "rgba(168,255,62,0.2)" : "transparent"}`,
                   WebkitTapHighlightColor: "transparent",
+                  transition: "all 0.18s",
                 }}
               >
                 {label}
@@ -372,8 +346,10 @@ export default function Navbar() {
                     padding: "13px 16px", borderRadius: 12, marginBottom: 3,
                     textDecoration: "none",
                     color: "rgba(255,255,255,0.65)", fontWeight: 700, fontSize: 15,
-                    WebkitTapHighlightColor: "transparent",
+                    WebkitTapHighlightColor: "transparent", transition: "all 0.18s",
                   }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(255,255,255,0.65)"; e.currentTarget.style.background = "transparent"; }}
                 >
                   <span style={{ fontSize: 18 }}>{icon}</span> {label}
                 </Link>
@@ -381,26 +357,12 @@ export default function Navbar() {
             </>
           ) : (
             <>
-              <Link
-                href="/login"
-                style={{
-                  display: "flex", alignItems: "center",
-                  padding: "13px 16px", borderRadius: 12, marginBottom: 3,
-                  textDecoration: "none",
-                  color: "rgba(255,255,255,0.65)", fontWeight: 700, fontSize: 15,
-                }}
-              >
+              <Link href="/login"
+                style={{ display: "flex", alignItems: "center", padding: "13px 16px", borderRadius: 12, marginBottom: 3, textDecoration: "none", color: "rgba(255,255,255,0.65)", fontWeight: 700, fontSize: 15 }}>
                 Sign In
               </Link>
-              <Link
-                href="/register"
-                style={{
-                  display: "flex", alignItems: "center",
-                  padding: "13px 16px", borderRadius: 12, marginBottom: 3,
-                  textDecoration: "none",
-                  color: "#A8FF3E", fontWeight: 700, fontSize: 15,
-                }}
-              >
+              <Link href="/register"
+                style={{ display: "flex", alignItems: "center", padding: "13px 16px", borderRadius: 12, marginBottom: 3, textDecoration: "none", color: "#A8FF3E", fontWeight: 700, fontSize: 15 }}>
                 Register — Free
               </Link>
             </>
@@ -424,8 +386,10 @@ export default function Navbar() {
                 cursor: "pointer", width: "100%",
                 fontFamily: "var(--font-body)",
                 WebkitTapHighlightColor: "transparent",
-                touchAction: "manipulation",
+                touchAction: "manipulation", transition: "all 0.18s",
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,80,80,0.18)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,80,80,0.1)"; }}
             >
               <LogOut size={15} /> Sign Out
             </button>

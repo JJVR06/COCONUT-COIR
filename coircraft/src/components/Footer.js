@@ -140,7 +140,7 @@ export default function Footer() {
 
           {/* Bottom bar */}
           <div className="footer-bottom">
-            <p>© 2025 CoirCraft PH &nbsp;·&nbsp;
+            <p>© 2026 CoirCraft PH &nbsp;·&nbsp;
               <strong style={{ color: "rgba(255,255,255,0.5)" }}>InnoBytes</strong>
             </p>
             <p>For educational purposes only, and no copyright infringement is intended.</p>

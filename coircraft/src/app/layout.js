@@ -20,22 +20,33 @@ const nunito = Nunito({
 export const metadata = {
   title: "CoirCraft PH",
   description: "Eco-friendly coconut coir products from the Philippines",
+  icons: {
+    icon: [
+      { url: "/favicon.ico",    sizes: "any" },
+      { url: "/icon-192.png",   sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png",   sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" data-scroll-behavior="smooth" className={`${jakarta.variable} ${nunito.variable}`}>
+    <html lang="en" className={`${jakarta.variable} ${nunito.variable}`}>
+      <head>
+        {/* Explicit link tags as fallback for older browsers */}
+        <link rel="icon"             href="/favicon.ico"          sizes="any" />
+        <link rel="icon"             href="/icon-192.png"         type="image/png" sizes="192x192" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+      </head>
       <body>
-        {/*
-          ClientOnly ensures AppProvider (and all children) are NEVER
-          server-rendered. The server sends a bare <body>, the client
-          mounts everything after hydration. This eliminates all
-          localStorage-related hydration mismatches permanently.
-        */}
         <AppProvider>
-            {children}
-            <MobileNavWrapper />
-          </AppProvider>
+          {children}
+          <MobileNavWrapper />
+        </AppProvider>
       </body>
     </html>
   );
