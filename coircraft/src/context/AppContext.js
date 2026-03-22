@@ -1,7 +1,9 @@
 "use client";
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 
 const AppContext = createContext(null);
+
+const INVENTORY_TTL = 5 * 60 * 1000; // 5 minutes
 
 function ls_read(key, fallback) {
   try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : fallback; }
@@ -43,6 +45,8 @@ const DEFAULTS = {
 export function AppProvider({ children }) {
   const [state,    setState]    = useState(DEFAULTS);
   const [hydrated, setHydrated] = useState(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   // ── HYDRATE SESSION FROM LOCALSTORAGE ON MOUNT ──
   useEffect(() => {
@@ -53,52 +57,42 @@ export function AppProvider({ children }) {
     setHydrated(true);
   }, []);
 
-  // ── LOAD INVENTORY FROM DB ON MOUNT ──
-  useEffect(() => {
-    loadInventoryFromDB();
-  }, []);
-
-  // ── LOAD ALL USER DATA FROM DATABASE WHEN USER LOGS IN ──
-  useEffect(() => {
-    if (!hydrated) return;
-    if (!state.user?.email) {
-      setState((p) => ({ ...p, cart: [], transactions: [], wishlist: [], reviews: {} }));
-      return;
-    }
-    const email = state.user.email;
-    loadCartFromDB(email);
-    loadWishlistFromDB(email);
-    loadOrdersFromDB(email);
-  }, [state.user?.email, hydrated]);
-
   // ── DB LOADERS ──
-  const loadInventoryFromDB = async () => {
+  // FIX: inventory loader now checks localStorage cache first
+  const loadInventoryFromDB = useCallback(async () => {
     try {
+      const cached = ls_read("cc_inventory_cache", null);
+      const now = Date.now();
+      if (cached?.ts && (now - cached.ts) < INVENTORY_TTL && Array.isArray(cached.data)) {
+        setState((p) => ({ ...p, inventory: cached.data }));
+        return;
+      }
       const res  = await fetch("/api/products");
       const data = await res.json();
       if (Array.isArray(data)) {
+        ls_write("cc_inventory_cache", { ts: now, data });
         setState((p) => ({ ...p, inventory: data }));
       }
     } catch {}
-  };
+  }, []);
 
-  const loadCartFromDB = async (email) => {
+  const loadCartFromDB = useCallback(async (email) => {
     try {
       const res  = await fetch(`/api/cart?email=${encodeURIComponent(email)}`);
       const data = await res.json();
       if (Array.isArray(data)) setState((p) => ({ ...p, cart: data }));
     } catch {}
-  };
+  }, []);
 
-  const loadWishlistFromDB = async (email) => {
+  const loadWishlistFromDB = useCallback(async (email) => {
     try {
       const res  = await fetch(`/api/wishlist?email=${encodeURIComponent(email)}`);
       const data = await res.json();
       if (Array.isArray(data)) setState((p) => ({ ...p, wishlist: data }));
     } catch {}
-  };
+  }, []);
 
-  const loadOrdersFromDB = async (email) => {
+  const loadOrdersFromDB = useCallback(async (email) => {
     try {
       const res  = await fetch(`/api/orders?email=${encodeURIComponent(email)}`);
       const data = await res.json();
@@ -116,7 +110,28 @@ export function AppProvider({ children }) {
         setState((p) => ({ ...p, transactions: txs }));
       }
     } catch {}
-  };
+  }, []);
+
+  // ── LOAD INVENTORY FROM DB ON MOUNT ──
+  useEffect(() => {
+    loadInventoryFromDB();
+  }, [loadInventoryFromDB]);
+
+  // ── LOAD ALL USER DATA IN PARALLEL WHEN USER LOGS IN ──
+  // FIX: was 3 sequential awaits, now all fire at the same time
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!state.user?.email) {
+      setState((p) => ({ ...p, cart: [], transactions: [], wishlist: [], reviews: {} }));
+      return;
+    }
+    const email = state.user.email;
+    Promise.all([
+      loadCartFromDB(email),
+      loadWishlistFromDB(email),
+      loadOrdersFromDB(email),
+    ]);
+  }, [state.user?.email, hydrated, loadCartFromDB, loadWishlistFromDB, loadOrdersFromDB]);
 
   // ── USER ──
   const setUser = useCallback((u) => {
@@ -136,95 +151,99 @@ export function AppProvider({ children }) {
   }, []);
 
   // ── INVENTORY ──
+  // FIX: bust the cache when the seller changes inventory
   const setInventory = useCallback((updater) => {
     setState((p) => {
       const inventory = typeof updater === "function" ? updater(p.inventory) : updater;
+      ls_write("cc_inventory_cache", { ts: Date.now(), data: inventory });
       return { ...p, inventory };
     });
   }, []);
 
   // ── CART ──
+  // FIX: optimistic update — UI changes instantly, DB syncs in background
   const addToCart = useCallback(async (item) => {
-    const email = state.user?.email;
-    if (email) {
-      try {
-        await fetch("/api/cart", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, ...item }),
-        });
-        await loadCartFromDB(email);
-        return;
-      } catch {}
-    }
+    const email = stateRef.current.user?.email;
+
+    // Update UI immediately
     setState((p) => {
       const found = p.cart.find((i) => i.id === item.id);
       const cart  = found
         ? p.cart.map((i) => i.id === item.id ? { ...i, qty: i.qty + 1 } : i)
         : [...p.cart, { ...item, qty: 1 }];
-      ls_write("cc_cart", cart);
       return { ...p, cart };
     });
-  }, [state.user?.email]);
+
+    // Sync to DB in background (don't await)
+    if (email) {
+      fetch("/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, ...item }),
+      }).catch(() => {});
+    } else {
+      const cart = stateRef.current.cart;
+      ls_write("cc_cart", cart);
+    }
+  }, []);
 
   const removeFromCart = useCallback(async (id) => {
-    const email = state.user?.email;
+    const email = stateRef.current.user?.email;
+
+    // Update UI immediately
+    setState((p) => ({ ...p, cart: p.cart.filter((i) => i.id !== id) }));
+
+    // Sync to DB in background
     if (email) {
-      try {
-        await fetch("/api/cart", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, id }),
-        });
-        await loadCartFromDB(email);
-        return;
-      } catch {}
+      fetch("/api/cart", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, id }),
+      }).catch(() => {});
+    } else {
+      ls_write("cc_cart", stateRef.current.cart);
     }
-    setState((p) => {
-      const cart = p.cart.filter((i) => i.id !== id);
-      ls_write("cc_cart", cart);
-      return { ...p, cart };
-    });
-  }, [state.user?.email]);
+  }, []);
 
   const updateQty = useCallback(async (id, qty) => {
-    const email = state.user?.email;
+    const email = stateRef.current.user?.email;
+
+    // Update UI immediately
+    setState((p) => ({
+      ...p,
+      cart: qty <= 0
+        ? p.cart.filter((i) => i.id !== id)
+        : p.cart.map((i) => i.id === id ? { ...i, qty } : i),
+    }));
+
+    // Sync to DB in background
     if (email) {
-      try {
-        await fetch("/api/cart", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, id, qty }),
-        });
-        await loadCartFromDB(email);
-        return;
-      } catch {}
+      fetch("/api/cart", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, id, qty }),
+      }).catch(() => {});
+    } else {
+      ls_write("cc_cart", stateRef.current.cart);
     }
-    setState((p) => {
-      const cart = p.cart.map((i) => i.id === id ? { ...i, qty } : i);
-      ls_write("cc_cart", cart);
-      return { ...p, cart };
-    });
-  }, [state.user?.email]);
+  }, []);
 
   const clearCart = useCallback(async () => {
-    const email = state.user?.email;
-    if (email) {
-      try {
-        await fetch("/api/cart", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, id: "all" }),
-        });
-      } catch {}
-    }
-    ls_remove("cc_cart");
+    const email = stateRef.current.user?.email;
     setState((p) => ({ ...p, cart: [] }));
-  }, [state.user?.email]);
+    ls_remove("cc_cart");
+    if (email) {
+      fetch("/api/cart", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, id: "all" }),
+      }).catch(() => {});
+    }
+  }, []);
 
   // ── ORDERS ──
   const addTransaction = useCallback(async (tx) => {
-    const email = state.user?.email || "";
+    const email = stateRef.current.user?.email || "";
     try {
       await fetch("/api/orders", {
         method: "POST",
@@ -244,7 +263,7 @@ export function AppProvider({ children }) {
     } catch {
       setState((p) => ({ ...p, transactions: [tx, ...p.transactions] }));
     }
-  }, [state.user?.email]);
+  }, [loadOrdersFromDB]);
 
   const setTransactions = useCallback((updater) => {
     setState((p) => {
@@ -254,44 +273,47 @@ export function AppProvider({ children }) {
   }, []);
 
   const markReceived = useCallback(async (txId) => {
-    try {
-      await fetch("/api/orders", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: txId, status: "Received" }),
-      });
-      if (state.user?.email) await loadOrdersFromDB(state.user.email);
-    } catch {
-      setState((p) => ({
-        ...p,
-        transactions: p.transactions.map((t) =>
-          t.id === txId ? { ...t, status: "Received" } : t
-        ),
-      }));
-    }
-  }, [state.user?.email]);
+    // Optimistic update
+    setState((p) => ({
+      ...p,
+      transactions: p.transactions.map((t) =>
+        t.id === txId ? { ...t, status: "Received" } : t
+      ),
+    }));
+    // Sync to DB in background
+    const email = stateRef.current.user?.email;
+    fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: txId, status: "Received" }),
+    }).catch(async () => {
+      // Revert on failure
+      if (email) await loadOrdersFromDB(email);
+    });
+  }, [loadOrdersFromDB]);
 
   // ── WISHLIST ──
+  // FIX: optimistic toggle — instant UI, background DB sync
   const toggleWishlist = useCallback(async (productId) => {
-    const email = state.user?.email;
-    if (email) {
-      try {
-        await fetch("/api/wishlist", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, productId }),
-        });
-        await loadWishlistFromDB(email);
-        return;
-      } catch {}
-    }
+    const email = stateRef.current.user?.email;
+
+    // Update UI immediately
     setState((p) => ({
       ...p,
       wishlist: p.wishlist.includes(productId)
         ? p.wishlist.filter((id) => id !== productId)
         : [...p.wishlist, productId],
     }));
-  }, [state.user?.email]);
+
+    // Sync to DB in background
+    if (email) {
+      fetch("/api/wishlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, productId }),
+      }).catch(() => {});
+    }
+  }, []);
 
   const isWishlisted = useCallback(
     (productId) => state.wishlist.includes(Number(productId)) || state.wishlist.includes(String(productId)),
@@ -306,7 +328,7 @@ export function AppProvider({ children }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productId:  review.productId,
-          userEmail:  state.user?.email || "",
+          userEmail:  stateRef.current.user?.email || "",
           author:     review.author,
           rating:     review.rating,
           comment:    review.comment || "",
@@ -314,7 +336,7 @@ export function AppProvider({ children }) {
       });
       await getProductReviews(review.productId);
     } catch {}
-  }, [state.user?.email]);
+  }, []);
 
   const getProductReviews = useCallback(async (productId) => {
     try {
@@ -332,7 +354,7 @@ export function AppProvider({ children }) {
         return mapped;
       }
     } catch {}
-    return state.reviews[productId] || [];
+    return stateRef.current.reviews[productId] || [];
   }, []);
 
   const getProductReviewsSync = useCallback(
