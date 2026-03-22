@@ -16,7 +16,7 @@ function ls_remove(key) {
   try { localStorage.removeItem(key); } catch {}
 }
 
-const DEFAULT_STOREFRONT = {
+export const DEFAULT_STOREFRONT = {
   heroTitle:        "Premium Philippine\nCoconut Coir Products",
   heroSubtitle:     "Eco-friendly, sustainably sourced from the Philippines.",
   announcement:     "",
@@ -39,7 +39,7 @@ const DEFAULTS = {
   wishlist:         [],
   reviews:          {},
   inventory:        [],
-  inventoryLoaded:  false,   // ← NEW: tracks when first DB fetch is complete
+  inventoryLoaded:  false,
   storefront:       DEFAULT_STOREFRONT,
 };
 
@@ -49,22 +49,24 @@ export function AppProvider({ children }) {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  // ── HYDRATE SESSION FROM LOCALSTORAGE ON MOUNT ──────────────────────────
+  // ── HYDRATE FROM LOCALSTORAGE ON MOUNT ──────────────────────────────────
   useEffect(() => {
     const user           = ls_read("cc_user",       null);
     const sellerLoggedIn = ls_read("cc_seller",     false);
-    const storefront     = ls_read("cc_storefront", DEFAULT_STOREFRONT);
-    setState((p) => ({ ...p, user, sellerLoggedIn, storefront }));
+    // Seed from localStorage while the DB fetch is in flight
+    const cachedSf       = ls_read("cc_storefront", DEFAULT_STOREFRONT);
+    setState((p) => ({ ...p, user, sellerLoggedIn, storefront: cachedSf }));
     setHydrated(true);
   }, []);
 
-  // ── DB LOADERS ───────────────────────────────────────────────────────────
+  // ── DB LOADERS ──────────────────────────────────────────────────────────
+
+  // Inventory — checks 5-minute localStorage cache first
   const loadInventoryFromDB = useCallback(async () => {
     try {
       const cached = ls_read("cc_inventory_cache", null);
       const now    = Date.now();
       if (cached?.ts && (now - cached.ts) < INVENTORY_TTL && Array.isArray(cached.data) && cached.data.length > 0) {
-        // Use cache immediately — mark as loaded right away
         setState((p) => ({ ...p, inventory: cached.data, inventoryLoaded: true }));
         return;
       }
@@ -74,11 +76,24 @@ export function AppProvider({ children }) {
         ls_write("cc_inventory_cache", { ts: now, data });
         setState((p) => ({ ...p, inventory: data, inventoryLoaded: true }));
       } else {
-        // Even on bad response, mark loaded so pages don't spin forever
         setState((p) => ({ ...p, inventoryLoaded: true }));
       }
     } catch {
       setState((p) => ({ ...p, inventoryLoaded: true }));
+    }
+  }, []);
+
+  // Storefront — loads from DB, merges with defaults, syncs to localStorage
+  const loadStorefrontFromDB = useCallback(async () => {
+    try {
+      const res  = await fetch("/api/storefront");
+      const data = await res.json();
+      // Merge: DB values override defaults, but defaults fill missing keys
+      const merged = { ...DEFAULT_STOREFRONT, ...data };
+      ls_write("cc_storefront", merged);
+      setState((p) => ({ ...p, storefront: merged }));
+    } catch {
+      // Keep the localStorage-seeded value; DB unreachable
     }
   }, []);
 
@@ -104,26 +119,30 @@ export function AppProvider({ children }) {
       const data = await res.json();
       if (Array.isArray(data)) {
         const txs = data.map((o) => ({
-          id:       o.id,
-          date:     new Date(o.created_at).toLocaleString(),
-          items:    typeof o.items === "string" ? JSON.parse(o.items) : o.items,
-          total:    Number(o.total),
-          method:   o.method,
-          delivery: o.delivery,
-          address:  o.address,
-          status:   o.status,
+          id:         o.id,
+          // Human-readable display date
+          date:       new Date(o.created_at).toLocaleString(),
+          // Raw ISO timestamp — used for accurate day/month math in reports
+          created_at: o.created_at,
+          items:      typeof o.items === "string" ? JSON.parse(o.items) : o.items,
+          total:      Number(o.total),
+          method:     o.method,
+          delivery:   o.delivery,
+          address:    o.address,
+          status:     o.status,
         }));
         setState((p) => ({ ...p, transactions: txs }));
       }
     } catch {}
   }, []);
 
-  // ── LOAD INVENTORY FROM DB ON MOUNT ─────────────────────────────────────
+  // ── BOOT LOADERS ─────────────────────────────────────────────────────────
   useEffect(() => {
     loadInventoryFromDB();
-  }, [loadInventoryFromDB]);
+    loadStorefrontFromDB(); // load storefront from DB on every page load
+  }, [loadInventoryFromDB, loadStorefrontFromDB]);
 
-  // ── LOAD ALL USER DATA IN PARALLEL WHEN USER LOGS IN ────────────────────
+  // Load all user-specific data when the user session is established
   useEffect(() => {
     if (!hydrated) return;
     if (!state.user?.email) {
@@ -150,9 +169,23 @@ export function AppProvider({ children }) {
   }, []);
 
   // ── STOREFRONT ───────────────────────────────────────────────────────────
-  const setStorefront = useCallback((sf) => {
+  // Saves to both localStorage (instant, offline) AND the DB (persistent)
+  const setStorefront = useCallback(async (sf) => {
+    // 1. Update React state and localStorage immediately so the UI responds instantly
     ls_write("cc_storefront", sf);
     setState((p) => ({ ...p, storefront: sf }));
+
+    // 2. Persist to DB in the background so it survives browser cache clears
+    try {
+      await fetch("/api/storefront", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(sf),
+      });
+    } catch (err) {
+      console.error("Storefront save to DB failed:", err);
+      // localStorage copy is still there — data not lost
+    }
   }, []);
 
   // ── INVENTORY ────────────────────────────────────────────────────────────
@@ -303,10 +336,6 @@ export function AppProvider({ children }) {
   );
 
   // ── REVIEWS ──────────────────────────────────────────────────────────────
-  /**
-   * ASYNC version — triggers a DB fetch, updates context state when done.
-   * Do NOT use the return value directly for rendering — use getProductReviewsSync.
-   */
   const getProductReviews = useCallback(async (productId) => {
     try {
       const res  = await fetch(`/api/reviews?productId=${productId}`);
@@ -326,10 +355,6 @@ export function AppProvider({ children }) {
     return stateRef.current.reviews[productId] || [];
   }, []);
 
-  /**
-   * SYNC version — reads from context state (already-fetched reviews).
-   * Safe to call during render. Returns [] if reviews haven't been fetched yet.
-   */
   const getProductReviewsSync = useCallback(
     (productId) => state.reviews[productId] || [],
     [state.reviews]
@@ -370,7 +395,7 @@ export function AppProvider({ children }) {
       wishlist:         state.wishlist,
       reviews:          state.reviews,
       inventory:        state.inventory,
-      inventoryLoaded:  state.inventoryLoaded,   // ← exposed to consumers
+      inventoryLoaded:  state.inventoryLoaded,
       storefront:       state.storefront,
       setUser, setSellerLoggedIn,
       setStorefront,
