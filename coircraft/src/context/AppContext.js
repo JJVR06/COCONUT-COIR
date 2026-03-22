@@ -1,265 +1,337 @@
 "use client";
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { products as defaultProducts } from "@/data/products";
 
 const AppContext = createContext(null);
 
-export const defaultStorefront = {
-  name: "CoirCraft Philippines",
-  tagline: "Premium eco-friendly coconut coir products from the Philippines.",
-  heroTitle: "Sustainable Living\nStarts with Coconut Coir.",
-  heroSubtitle:
-    "Premium eco-friendly products handcrafted from Philippine coconut husks. Join thousands of happy customers.",
-  announcement: "",
-  address: "123 Coir Avenue, Quezon City, Metro Manila",
-  hours: "Mon–Sat: 8:00 AM – 6:00 PM",
-  contactEmail: "admin@coircraft.ph",
-  contactPhone: "+63 912 345 6789",
-  showTestimonials: true,
-  showNewArrivals: true,
-  showFeatured: true,
-  accentColor: "#A8FF3E",
-};
-
-const LS = {
-  user:           "cc_user",
-  sellerLoggedIn: "cc_seller",
-  cart:           "cc_cart",
-  transactions:   "cc_transactions",
-  wishlist:       "cc_wishlist",
-  reviews:        "cc_reviews",
-  storefront:     "cc_storefront",
-};
-
-const EMPTY = {
-  user:             null,
-  sellerLoggedIn:   false,
-  cart:             [],
-  transactions:     [],
-  wishlist:         [],
-  reviews:          [],
-  inventory:        defaultProducts,
-  storefront:       defaultStorefront,
-  inventoryLoading: false,
-};
-
+// localStorage helpers — only for session (user login + seller)
 function ls_read(key, fallback) {
-  try {
-    const v = localStorage.getItem(key);
-    return v !== null ? JSON.parse(v) : fallback;
-  } catch { return fallback; }
+  try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : fallback; }
+  catch { return fallback; }
 }
 function ls_write(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
+function ls_remove(key) {
+  try { localStorage.removeItem(key); } catch {}
+}
+
+const DEFAULTS = {
+  user:           null,
+  sellerLoggedIn: false,
+  cart:           [],
+  transactions:   [],
+  wishlist:       [],
+  reviews:        {},
+};
 
 export function AppProvider({ children }) {
-  const [s, setS] = useState(EMPTY);
+  const [state,   setState]   = useState(DEFAULTS);
+  const [hydrated, setHydrated] = useState(false);
 
-  // ── 1. Hydrate non-inventory state from localStorage ─────────────────────
+  // ── HYDRATE SESSION FROM LOCALSTORAGE ON MOUNT ──
   useEffect(() => {
-    setS((prev) => ({
-      ...prev,
-      user:           ls_read(LS.user,           null),
-      sellerLoggedIn: ls_read(LS.sellerLoggedIn, false),
-      cart:           ls_read(LS.cart,           []),
-      transactions:   ls_read(LS.transactions,   []),
-      wishlist:       ls_read(LS.wishlist,        []),
-      reviews:        ls_read(LS.reviews,         []),
-      storefront:     ls_read(LS.storefront,      defaultStorefront),
-    }));
+    const user           = ls_read("cc_user",   null);
+    const sellerLoggedIn = ls_read("cc_seller", false);
+    setState((p) => ({ ...p, user, sellerLoggedIn }));
+    setHydrated(true);
   }, []);
 
-  // ── 2. Fetch inventory from DATABASE on mount ─────────────────────────────
+  // ── LOAD ALL USER DATA FROM DATABASE WHEN USER LOGS IN ──
   useEffect(() => {
-    const fetchInventory = async () => {
-      setS((prev) => ({ ...prev, inventoryLoading: true }));
+    if (!hydrated) return;
+    if (!state.user?.email) {
+      // Clear all data on logout
+      setState((p) => ({ ...p, cart: [], transactions: [], wishlist: [], reviews: {} }));
+      return;
+    }
+    const email = state.user.email;
+    loadCartFromDB(email);
+    loadWishlistFromDB(email);
+    loadOrdersFromDB(email);
+  }, [state.user?.email, hydrated]);
+
+  // ── DB LOADERS ──
+  const loadCartFromDB = async (email) => {
+    try {
+      const res  = await fetch(`/api/cart?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setState((p) => ({ ...p, cart: data }));
+      }
+    } catch {}
+  };
+
+  const loadWishlistFromDB = async (email) => {
+    try {
+      const res  = await fetch(`/api/wishlist?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setState((p) => ({ ...p, wishlist: data }));
+      }
+    } catch {}
+  };
+
+  const loadOrdersFromDB = async (email) => {
+    try {
+      const res  = await fetch(`/api/orders?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const txs = data.map((o) => ({
+          id:       o.id,
+          date:     new Date(o.created_at).toLocaleString(),
+          items:    typeof o.items === "string" ? JSON.parse(o.items) : o.items,
+          total:    Number(o.total),
+          method:   o.method,
+          delivery: o.delivery,
+          address:  o.address,
+          status:   o.status,
+        }));
+        setState((p) => ({ ...p, transactions: txs }));
+      }
+    } catch {}
+  };
+
+  // ── USER ──
+  const setUser = useCallback((u) => {
+    ls_write("cc_user", u);
+    setState((p) => ({ ...p, user: u }));
+  }, []);
+
+  const setSellerLoggedIn = useCallback((v) => {
+    ls_write("cc_seller", v);
+    setState((p) => ({ ...p, sellerLoggedIn: v }));
+  }, []);
+
+  // ── CART — all DB, fallback to local for guests ──
+  const addToCart = useCallback(async (item) => {
+    const email = state.user?.email;
+
+    if (email) {
+      // Logged in — save to DB
       try {
-        const res = await fetch("/api/products");
-        if (!res.ok) throw new Error(`API error ${res.status}`);
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setS((prev) => ({ ...prev, inventory: data, inventoryLoading: false }));
-        } else {
-          // DB table is empty — keep default products as fallback
-          setS((prev) => ({ ...prev, inventory: defaultProducts, inventoryLoading: false }));
-        }
-      } catch (err) {
-        console.warn("Could not fetch products from DB, using defaults:", err.message);
-        setS((prev) => ({ ...prev, inventory: defaultProducts, inventoryLoading: false }));
-      }
-    };
-    fetchInventory();
-  }, []);
-
-  // ── 3. Cross-tab sync via storage events ─────────────────────────────────
-  useEffect(() => {
-    const stateKey = Object.fromEntries(Object.entries(LS).map(([k, v]) => [v, k]));
-    const handler = (e) => {
-      // Re-fetch inventory when seller saves a change in another tab
-      if (e.key === "cc_inventory_updated") {
-        fetch("/api/products")
-          .then((r) => r.json())
-          .then((data) => {
-            if (Array.isArray(data) && data.length > 0) {
-              setS((p) => ({ ...p, inventory: data }));
-            }
-          })
-          .catch(() => {});
+        await fetch("/api/cart", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, ...item }),
+        });
+        await loadCartFromDB(email);
         return;
-      }
-      const key = stateKey[e.key];
-      if (key && e.newValue !== null) {
-        try { setS((p) => ({ ...p, [key]: JSON.parse(e.newValue) })); } catch {}
-      }
-    };
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
-  }, []);
+      } catch {}
+    }
 
-  // ── Generic localStorage patch (for non-inventory state) ─────────────────
-  const patch = useCallback((key, value) => {
-    setS((p) => {
-      ls_write(LS[key], value);
-      return { ...p, [key]: value };
-    });
-  }, []);
-
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  const setUser           = useCallback((v) => patch("user",           v), [patch]);
-  const setSellerLoggedIn = useCallback((v) => patch("sellerLoggedIn", v), [patch]);
-
-  // ── Inventory: update local state AND signal other tabs to re-fetch DB ────
-  const setInventory = useCallback((newInventory) => {
-    setS((p) => ({ ...p, inventory: newInventory }));
-    try { localStorage.setItem("cc_inventory_updated", Date.now().toString()); } catch {}
-  }, []);
-
-  // ── Storefront ────────────────────────────────────────────────────────────
-  const setStorefront = useCallback((v) => patch("storefront", v), [patch]);
-
-  // ── Cart ──────────────────────────────────────────────────────────────────
-  const addToCart = useCallback((item) => {
-    setS((p) => {
+    // Guest — save to localStorage
+    setState((p) => {
       const found = p.cart.find((i) => i.id === item.id);
-      const cart = found
+      const cart  = found
         ? p.cart.map((i) => i.id === item.id ? { ...i, qty: i.qty + 1 } : i)
         : [...p.cart, { ...item, qty: 1 }];
-      ls_write(LS.cart, cart);
+      ls_write("cc_cart", cart);
       return { ...p, cart };
     });
-  }, []);
+  }, [state.user?.email]);
 
-  const removeFromCart = useCallback((id) => {
-    setS((p) => {
+  const removeFromCart = useCallback(async (id) => {
+    const email = state.user?.email;
+    if (email) {
+      try {
+        await fetch("/api/cart", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, id }),
+        });
+        await loadCartFromDB(email);
+        return;
+      } catch {}
+    }
+    setState((p) => {
       const cart = p.cart.filter((i) => i.id !== id);
-      ls_write(LS.cart, cart);
+      ls_write("cc_cart", cart);
       return { ...p, cart };
     });
-  }, []);
+  }, [state.user?.email]);
 
-  const updateQty = useCallback((id, qty) => {
-    setS((p) => {
+  const updateQty = useCallback(async (id, qty) => {
+    const email = state.user?.email;
+    if (email) {
+      try {
+        await fetch("/api/cart", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, id, qty }),
+        });
+        await loadCartFromDB(email);
+        return;
+      } catch {}
+    }
+    setState((p) => {
       const cart = p.cart.map((i) => i.id === id ? { ...i, qty } : i);
-      ls_write(LS.cart, cart);
+      ls_write("cc_cart", cart);
       return { ...p, cart };
     });
-  }, []);
+  }, [state.user?.email]);
 
-  const clearCart = useCallback(() => {
-    setS((p) => { ls_write(LS.cart, []); return { ...p, cart: [] }; });
-  }, []);
+  const clearCart = useCallback(async () => {
+    const email = state.user?.email;
+    if (email) {
+      try {
+        await fetch("/api/cart", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, id: "all" }),
+        });
+      } catch {}
+    }
+    ls_remove("cc_cart");
+    setState((p) => ({ ...p, cart: [] }));
+  }, [state.user?.email]);
 
-  // ── Transactions ──────────────────────────────────────────────────────────
-  const addTransaction = useCallback((tx) => {
-    setS((p) => {
-      const transactions = [tx, ...p.transactions];
-      ls_write(LS.transactions, transactions);
+  // ── ORDERS ──
+  const addTransaction = useCallback(async (tx) => {
+    const email = state.user?.email || "";
+    try {
+      await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id:         tx.id,
+          user_email: email,
+          items:      tx.items,
+          total:      tx.total,
+          method:     tx.method,
+          delivery:   tx.delivery,
+          address:    tx.address || "",
+          status:     "Pending",
+        }),
+      });
+      // Reload orders from DB to stay in sync
+      if (email) await loadOrdersFromDB(email);
+    } catch {
+      // Fallback to local state
+      setState((p) => ({ ...p, transactions: [tx, ...p.transactions] }));
+    }
+  }, [state.user?.email]);
+
+  const setTransactions = useCallback((updater) => {
+    setState((p) => {
+      const transactions = typeof updater === "function" ? updater(p.transactions) : updater;
       return { ...p, transactions };
     });
   }, []);
 
-  const setTransactions = useCallback((fn) => {
-    setS((p) => {
-      const transactions = typeof fn === "function" ? fn(p.transactions) : fn;
-      ls_write(LS.transactions, transactions);
-      return { ...p, transactions };
-    });
+  const markReceived = useCallback(async (txId) => {
+    try {
+      await fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: txId, status: "Received" }),
+      });
+      // Reload from DB
+      if (state.user?.email) await loadOrdersFromDB(state.user.email);
+    } catch {
+      setState((p) => ({
+        ...p,
+        transactions: p.transactions.map((t) =>
+          t.id === txId ? { ...t, status: "Received" } : t
+        ),
+      }));
+    }
+  }, [state.user?.email]);
+
+  // ── WISHLIST ──
+  const toggleWishlist = useCallback(async (productId) => {
+    const email = state.user?.email;
+    if (email) {
+      try {
+        await fetch("/api/wishlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, productId }),
+        });
+        await loadWishlistFromDB(email);
+        return;
+      } catch {}
+    }
+    // Guest fallback
+    setState((p) => ({
+      ...p,
+      wishlist: p.wishlist.includes(productId)
+        ? p.wishlist.filter((id) => id !== productId)
+        : [...p.wishlist, productId],
+    }));
+  }, [state.user?.email]);
+
+  const isWishlisted = useCallback(
+    (productId) => state.wishlist.includes(Number(productId)) || state.wishlist.includes(String(productId)),
+    [state.wishlist]
+  );
+
+  // ── REVIEWS ──
+  const addReview = useCallback(async (review) => {
+    try {
+      await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId:  review.productId,
+          userEmail:  state.user?.email || "",
+          author:     review.author,
+          rating:     review.rating,
+          comment:    review.comment || "",
+        }),
+      });
+      // Refresh reviews from DB
+      await getProductReviews(review.productId);
+    } catch {}
+  }, [state.user?.email]);
+
+  const getProductReviews = useCallback(async (productId) => {
+    try {
+      const res  = await fetch(`/api/reviews?productId=${productId}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        const mapped = data.map((r) => ({
+          productId: r.product_id,
+          author:    r.author,
+          rating:    r.rating,
+          comment:   r.comment,
+          date:      new Date(r.created_at).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }),
+        }));
+        setState((p) => ({ ...p, reviews: { ...p.reviews, [productId]: mapped } }));
+        return mapped;
+      }
+    } catch {}
+    return state.reviews[productId] || [];
   }, []);
 
-  const markReceived = useCallback((id) => {
-    setS((p) => {
-      const transactions = p.transactions.map((t) =>
-        t.id === id ? { ...t, status: "Received" } : t
-      );
-      ls_write(LS.transactions, transactions);
-      return { ...p, transactions };
-    });
-  }, []);
-
-  // ── Wishlist ──────────────────────────────────────────────────────────────
-  const toggleWishlist = useCallback((productId) => {
-    setS((p) => {
-      const wishlist = p.wishlist.includes(productId)
-        ? p.wishlist.filter((x) => x !== productId)
-        : [...p.wishlist, productId];
-      ls_write(LS.wishlist, wishlist);
-      return { ...p, wishlist };
-    });
-  }, []);
-
-  const isWishlisted = useCallback((id) => s.wishlist.includes(id), [s.wishlist]);
-
-  // ── Reviews ───────────────────────────────────────────────────────────────
-  const getProductReviews = useCallback(
-    (id) => s.reviews.filter((r) => r.productId === id),
-    [s.reviews]
+  const getProductReviewsSync = useCallback(
+    (productId) => state.reviews[productId] || [],
+    [state.reviews]
   );
 
   const canReview = useCallback(
-    (id) =>
-      s.user &&
-      s.transactions.some(
-        (t) => t.status === "Received" && t.items?.some((i) => i.id === id)
-      ),
-    [s.user, s.transactions]
+    (productId) => {
+      if (!state.user) return false;
+      return state.transactions.some(
+        (t) => t.status === "Received" && t.items?.some((i) => Number(i.id) === Number(productId))
+      );
+    },
+    [state.user, state.transactions]
   );
 
-  const addReview = useCallback((review) => {
-    setS((p) => {
-      const reviews = [
-        review,
-        ...p.reviews.filter(
-          (r) => !(r.productId === review.productId && r.author === review.author)
-        ),
-      ];
-      ls_write(LS.reviews, reviews);
-      return { ...p, reviews };
-    });
-  }, []);
-
   return (
-    <AppContext.Provider
-      value={{
-        ...s,
-        setUser,
-        setSellerLoggedIn,
-        setInventory,
-        setStorefront,
-        addToCart,
-        removeFromCart,
-        updateQty,
-        clearCart,
-        addTransaction,
-        setTransactions,
-        markReceived,
-        toggleWishlist,
-        isWishlisted,
-        addReview,
-        getProductReviews,
-        canReview,
-      }}
-    >
+    <AppContext.Provider value={{
+      user:           state.user,
+      sellerLoggedIn: state.sellerLoggedIn,
+      cart:           state.cart,
+      transactions:   state.transactions,
+      wishlist:       state.wishlist,
+      reviews:        state.reviews,
+      setUser, setSellerLoggedIn,
+      addToCart, removeFromCart, updateQty, clearCart,
+      addTransaction, setTransactions, markReceived,
+      toggleWishlist, isWishlisted,
+      addReview, getProductReviews, getProductReviewsSync, canReview,
+    }}>
       {children}
     </AppContext.Provider>
   );
