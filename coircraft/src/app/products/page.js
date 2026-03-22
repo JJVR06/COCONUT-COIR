@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
+import { useProducts } from "@/lib/useProducts";  
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
@@ -9,8 +10,8 @@ import { Suspense } from "react";
 import { Search } from "lucide-react";
 
 function ProductsContent() {
-  const { inventory, storefront } = useApp();
-  const products = Array.isArray(inventory) ? inventory : [];
+  const { storefront } = useApp();
+  const { products } = useProducts();
 
   const searchParams  = useSearchParams();
   const initCategory  = searchParams.get("cat") || searchParams.get("category") || "All";
