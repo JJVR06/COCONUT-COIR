@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import ProductCard from "@/components/ProductCard"; // ← top-level import (was require() inside render)
+import ProductCard from "@/components/ProductCard";
 import Link from "next/link";
 import { createPortal } from "react-dom";
 
@@ -14,12 +14,10 @@ function StarPicker({ value, onChange }) {
   return (
     <div style={{ display: "flex", gap: 4 }}>
       {[1, 2, 3, 4, 5].map((n) => (
-        <span
-          key={n} className="tk-star"
+        <span key={n} className="tk-star"
           onMouseEnter={() => setHovered(n)} onMouseLeave={() => setHovered(0)}
           onClick={() => onChange(n)}
-          style={{ color: n <= (hovered || value) ? "#F4A01A" : "#DDD" }}
-        >
+          style={{ color: n <= (hovered || value) ? "#F4A01A" : "#DDD" }}>
           ★
         </span>
       ))}
@@ -27,62 +25,78 @@ function StarPicker({ value, onChange }) {
   );
 }
 
-/* ── Sticky mobile bottom bar ── */
+/* ── Sticky mobile bottom bar ──
+   Rendered via portal but visibility is controlled purely by CSS.
+   display:none on ≥768px, display:flex on <768px.
+   This means it NEVER appears on desktop, even though it's in the DOM. ── */
 function MobileBar({ product, qty, setQty, onAdd, added, wishlisted, onWishlist }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted || !product || product.stock === 0) return null;
 
   return createPortal(
-    <div style={{
-      position: "fixed", bottom: 0, left: 0, right: 0,
-      background: "#fff", borderTop: "1px solid #E5EDE5",
-      padding: "12px 16px 20px", zIndex: 80,
-      display: "flex", alignItems: "center", gap: 10,
-      boxShadow: "0 -4px 20px rgba(14,32,17,0.10)",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F5F9F0", borderRadius: 999, padding: "6px 12px", border: "2px solid #E5EDE5", flexShrink: 0 }}>
-        <button onClick={() => setQty(Math.max(1, qty - 1))} style={{ width: 28, height: 28, background: "#0E2011", borderRadius: "50%", border: "none", color: "#A8FF3E", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
-        <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 16, minWidth: 20, textAlign: "center" }}>{qty}</span>
-        <button onClick={() => setQty(Math.min(product.stock, qty + 1))} style={{ width: 28, height: 28, background: "#0E2011", borderRadius: "50%", border: "none", color: "#A8FF3E", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+    <>
+      <style>{`
+        .pd-mobile-bar {
+          /* Hidden by default — desktop never sees this */
+          display: none !important;
+          position: fixed;
+          bottom: 0; left: 0; right: 0;
+          background: #fff;
+          border-top: 1px solid #E5EDE5;
+          padding: 12px 16px 20px;
+          z-index: 80;
+          align-items: center;
+          gap: 10px;
+          box-shadow: 0 -4px 20px rgba(14,32,17,0.10);
+        }
+        /* Only reveal on true mobile widths */
+        @media (max-width: 767px) {
+          .pd-mobile-bar { display: flex !important; }
+        }
+      `}</style>
+      <div className="pd-mobile-bar">
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F5F9F0", borderRadius: 999, padding: "6px 12px", border: "2px solid #E5EDE5", flexShrink: 0 }}>
+          <button onClick={() => setQty(Math.max(1, qty - 1))} style={{ width: 28, height: 28, background: "#0E2011", borderRadius: "50%", border: "none", color: "#A8FF3E", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+          <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 16, minWidth: 20, textAlign: "center" }}>{qty}</span>
+          <button onClick={() => setQty(Math.min(product.stock, qty + 1))} style={{ width: 28, height: 28, background: "#0E2011", borderRadius: "50%", border: "none", color: "#A8FF3E", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+        </div>
+        <button onClick={onAdd} style={{ flex: 1, background: added ? "#E8FFD0" : "linear-gradient(135deg,#A8FF3E,#5BCC1C)", color: added ? "#1A7A2E" : "#0E2011", border: "none", borderRadius: 999, padding: "13px 0", fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, cursor: "pointer", transition: "all 0.2s", boxShadow: added ? "none" : "0 4px 16px rgba(168,255,62,0.40)" }}>
+          {added ? "✓ Added to Cart!" : "🛒 Add to Cart"}
+        </button>
+        <button onClick={onWishlist} style={{ width: 48, height: 48, background: wishlisted ? "#FFF0F0" : "#F5F5F0", border: `2px solid ${wishlisted ? "#FFCDD2" : "#E5EDE5"}`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: 20, transition: "all 0.2s" }}>
+          {wishlisted ? "❤️" : "🤍"}
+        </button>
       </div>
-      <button onClick={onAdd} style={{ flex: 1, background: added ? "#E8FFD0" : "linear-gradient(135deg,#A8FF3E,#5BCC1C)", color: added ? "#1A7A2E" : "#0E2011", border: "none", borderRadius: 999, padding: "13px 0", fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 15, cursor: "pointer", transition: "all 0.2s", boxShadow: added ? "none" : "0 4px 16px rgba(168,255,62,0.40)" }}>
-        {added ? "✓ Added to Cart!" : "🛒 Add to Cart"}
-      </button>
-      <button onClick={onWishlist} style={{ width: 48, height: 48, background: wishlisted ? "#FFF0F0" : "#F5F5F0", border: `2px solid ${wishlisted ? "#FFCDD2" : "#E5EDE5"}`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: 20, transition: "all 0.2s" }}>
-        {wishlisted ? "❤️" : "🤍"}
-      </button>
-    </div>,
+    </>,
     document.body
   );
 }
 
-const TAG_BG  = { "Best Seller": "#FF6B35", "Trending": "#E74C3C", "New": "#1A7A2E", "Featured": "#0E2011" };
-const IMG_BG  = ["linear-gradient(135deg,#E8FFD0,#C5F0A0)", "linear-gradient(135deg,#FFF3D9,#FFE5A0)", "linear-gradient(135deg,#E3F2FD,#BBDEFB)", "linear-gradient(135deg,#F3E5F5,#E1BEE7)"];
+const TAG_BG = { "Best Seller": "#FF6B35", "Trending": "#E74C3C", "New": "#1A7A2E", "Featured": "#0E2011" };
+const IMG_BG = ["linear-gradient(135deg,#E8FFD0,#C5F0A0)", "linear-gradient(135deg,#FFF3D9,#FFE5A0)", "linear-gradient(135deg,#E3F2FD,#BBDEFB)", "linear-gradient(135deg,#F3E5F5,#E1BEE7)"];
 
-/* ── Skeleton loader for product detail ── */
 function ProductSkeleton() {
   return (
     <>
       <Navbar />
-      <main style={{ background: "var(--tk-bg)", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
+      <main style={{ background: "var(--tk-bg)", minHeight: "100vh" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px 48px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 24 }} className="pd-grid">
+          <div className="pd-grid">
             <div className="tk-skeleton" style={{ borderRadius: 22, aspectRatio: "1" }} />
             <div>
               <div className="tk-skeleton" style={{ height: 16, width: "40%", borderRadius: 8, marginBottom: 12 }} />
               <div className="tk-skeleton" style={{ height: 36, width: "80%", borderRadius: 8, marginBottom: 12 }} />
-              <div className="tk-skeleton" style={{ height: 20, width: "60%", borderRadius: 8, marginBottom: 20 }} />
               <div className="tk-skeleton" style={{ height: 14, borderRadius: 6, marginBottom: 8 }} />
-              <div className="tk-skeleton" style={{ height: 14, width: "85%", borderRadius: 6, marginBottom: 8 }} />
-              <div className="tk-skeleton" style={{ height: 14, width: "70%", borderRadius: 6, marginBottom: 24 }} />
+              <div className="tk-skeleton" style={{ height: 14, width: "85%", borderRadius: 6, marginBottom: 24 }} />
               <div className="tk-skeleton" style={{ height: 46, width: "50%", borderRadius: 999 }} />
             </div>
           </div>
           <style>{`
-            @media (min-width: 768px) { .pd-grid { grid-template-columns: 1fr 1fr !important; gap: 48px !important; } }
-            @keyframes skeletonShimmer { from{background-position:-400px 0} to{background-position:400px 0} }
-            .tk-skeleton { background: linear-gradient(90deg,#E8F0E0 25%,#F2FAF0 50%,#E8F0E0 75%); background-size: 800px 100%; animation: skeletonShimmer 1.6s linear infinite; }
+            .pd-grid{display:grid;grid-template-columns:1fr;gap:24px}
+            @media(min-width:768px){.pd-grid{grid-template-columns:1fr 1fr;gap:48px}}
+            @keyframes skeletonShimmer{from{background-position:-400px 0}to{background-position:400px 0}}
+            .tk-skeleton{background:linear-gradient(90deg,#E8F0E0 25%,#F2FAF0 50%,#E8F0E0 75%);background-size:800px 100%;animation:skeletonShimmer 1.6s linear infinite}
           `}</style>
         </div>
       </main>
@@ -92,15 +106,15 @@ function ProductSkeleton() {
 }
 
 export default function ProductDetailPage() {
-  const { id }    = useParams();
-  const router    = useRouter();
+  const { id }  = useParams();
+  const router  = useRouter();
 
   const {
     inventory, inventoryLoaded,
     user, addToCart,
     isWishlisted, toggleWishlist,
-    getProductReviews,      // async — used in useEffect to trigger fetch
-    getProductReviewsSync,  // sync  — used for rendering
+    getProductReviews,
+    getProductReviewsSync,
     addReview, canReview,
   } = useApp();
 
@@ -113,17 +127,12 @@ export default function ProductDetailPage() {
   const [submitted, setSubmitted] = useState(false);
   const [added,     setAdded]     = useState(false);
 
-  // ── Fetch reviews once product is known ──────────────────────────────────
   useEffect(() => {
-    if (product?.id) {
-      getProductReviews(product.id); // async — updates context state when done
-    }
+    if (product?.id) getProductReviews(product.id);
   }, [product?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Show skeleton while inventory is still loading ────────────────────────
   if (!inventoryLoaded) return <ProductSkeleton />;
 
-  // ── Product not found (after inventory has loaded) ─────────────────────
   if (!product) return (
     <>
       <Navbar />
@@ -137,7 +146,6 @@ export default function ProductDetailPage() {
     </>
   );
 
-  // ── Use SYNC version for rendering — no Promise returned ─────────────────
   const reviews       = getProductReviewsSync(product.id);
   const avgRating     = reviews.length
     ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
@@ -164,7 +172,6 @@ export default function ProductDetailPage() {
     setSubmitted(true);
     setRating(0);
     setComment("");
-    // Refresh reviews after submission
     getProductReviews(product.id);
   };
 
@@ -178,15 +185,21 @@ export default function ProductDetailPage() {
       <style>{`
         .pd-grid { display: grid; grid-template-columns: 1fr; gap: 24px; }
         @media (min-width: 768px) { .pd-grid { grid-template-columns: 1fr 1fr; gap: 48px; } }
+
+        /* Desktop Add to Cart — visible only on ≥768px */
         .pd-desktop-cta { display: none; }
         @media (min-width: 768px) { .pd-desktop-cta { display: block; } }
-        .pd-mobile-bar-spacer { height: 80px; }
-        @media (min-width: 768px) { .pd-mobile-bar-spacer { display: none; } }
-        .pd-related-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-        @media (min-width: 640px)  { .pd-related-grid { grid-template-columns: repeat(3, 1fr); } }
-        @media (min-width: 1024px) { .pd-related-grid { grid-template-columns: repeat(4, 1fr); } }
+
+        /* Bottom spacer — only reserve space when mobile bar is showing */
+        .pd-mobile-bar-spacer { display: none; }
+        @media (max-width: 767px) { .pd-mobile-bar-spacer { display: block; height: 80px; } }
+
+        .pd-related-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; }
+        @media (min-width: 640px)  { .pd-related-grid { grid-template-columns: repeat(3,1fr); } }
+        @media (min-width: 1024px) { .pd-related-grid { grid-template-columns: repeat(4,1fr); } }
+
         .pd-specs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        @media (min-width: 480px) { .pd-specs-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (min-width: 480px) { .pd-specs-grid { grid-template-columns: repeat(3,1fr); } }
       `}</style>
 
       <main style={{ background: "var(--tk-bg)", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
@@ -201,8 +214,9 @@ export default function ProductDetailPage() {
             <span style={{ color: "#0E2011", fontWeight: 600 }}>{product.name}</span>
           </div>
 
-          {/* ── Product ── */}
+          {/* ── Product layout ── */}
           <div className="pd-grid" style={{ marginBottom: 40 }}>
+
             {/* Image */}
             <div style={{ position: "relative" }}>
               <div style={{ background: imgBg, borderRadius: 22, overflow: "hidden", aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", width: "100%" }}>
@@ -223,6 +237,7 @@ export default function ProductDetailPage() {
             <div>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 2, textTransform: "uppercase", color: "#1A7A2E", marginBottom: 8 }}>{product.category}</div>
               <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(22px,5vw,38px)", fontWeight: 800, color: "#0E2011", margin: "0 0 10px", lineHeight: 1.15 }}>{product.name}</h1>
+
               {avgRating && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                   <span style={{ color: "#F4A01A", fontSize: 16 }}>{"★".repeat(Math.round(avgRating))}</span>
@@ -230,10 +245,13 @@ export default function ProductDetailPage() {
                   <span style={{ color: "#aaa", fontSize: 12 }}>({reviews.length} review{reviews.length !== 1 ? "s" : ""})</span>
                 </div>
               )}
+
               <p style={{ color: "#666", fontSize: "clamp(14px,2vw,16px)", lineHeight: 1.8, marginBottom: 20 }}>{product.description}</p>
+
               <div style={{ fontFamily: "var(--font-display)", fontSize: "clamp(30px,5vw,42px)", fontWeight: 800, color: "#0E2011", marginBottom: 16 }}>
                 ₱{(product.price || 0).toLocaleString()}
               </div>
+
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: product.stock > 0 ? "#1A7A2E" : "#E74C3C", flexShrink: 0 }} />
                 <span style={{ fontSize: 13, color: product.stock > 0 ? "#1A7A2E" : "#E74C3C", fontWeight: 700 }}>
@@ -258,7 +276,7 @@ export default function ProductDetailPage() {
                 ))}
               </div>
 
-              {/* Desktop CTA */}
+              {/* ── Desktop CTA — only visible on ≥768px via CSS ── */}
               <div className="pd-desktop-cta">
                 {product.stock > 0 && (
                   <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 22 }}>
@@ -271,10 +289,12 @@ export default function ProductDetailPage() {
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 12 }}>
-                  <button onClick={handleAddToCart} disabled={product.stock === 0} className="tk-btn-cta" style={{ flex: 1, textAlign: "center", opacity: product.stock === 0 ? 0.5 : 1, cursor: product.stock === 0 ? "not-allowed" : "pointer" }}>
+                  <button onClick={handleAddToCart} disabled={product.stock === 0} className="tk-btn-cta"
+                    style={{ flex: 1, textAlign: "center", opacity: product.stock === 0 ? 0.5 : 1, cursor: product.stock === 0 ? "not-allowed" : "pointer" }}>
                     {added ? "✓ Added!" : "🛒 Add to Cart"}
                   </button>
-                  <button className="tk-heart" onClick={handleWishlist} style={{ width: 52, height: 52, background: "#fff", border: `2px solid ${liked ? "#FFCDD2" : "#E5EDE5"}`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: 22 }}>
+                  <button className="tk-heart" onClick={handleWishlist}
+                    style={{ width: 52, height: 52, background: "#fff", border: `2px solid ${liked ? "#FFCDD2" : "#E5EDE5"}`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: 22 }}>
                     {liked ? "❤️" : "🤍"}
                   </button>
                 </div>
@@ -349,18 +369,17 @@ export default function ProductDetailPage() {
             <div style={{ marginBottom: 40 }}>
               <h2 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(18px,3vw,24px)", fontWeight: 800, color: "#0E2011", margin: "0 0 20px" }}>Related Products</h2>
               <div className="pd-related-grid">
-                {/* ← No more require() — using top-level import */}
-                {related.map((p, i) => (
-                  <ProductCard key={p.id} product={p} index={i} />
-                ))}
+                {related.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
               </div>
             </div>
           )}
 
+          {/* Only reserves space on mobile when the fixed bar is visible */}
           <div className="pd-mobile-bar-spacer" />
         </div>
       </main>
 
+      {/* Mobile bar — portal-rendered, CSS-hidden on desktop */}
       <MobileBar
         product={product} qty={qty} setQty={setQty}
         onAdd={handleAddToCart} added={added}

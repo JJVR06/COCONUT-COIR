@@ -6,11 +6,78 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Plus, CheckCircle } from "lucide-react";
 
+/* ── Philippine courier options ─────────────────────────────────────────── */
+const COURIERS = [
+  {
+    id:       "jnt",
+    name:     "J&T Express",
+    logo:     "🟥",
+    tagline:  "Nationwide delivery",
+    rate:     80,
+    eta:      "3–5 business days",
+    features: ["Real-time tracking", "Cash on pickup", "Wide coverage"],
+  },
+  {
+    id:       "ninjavan",
+    name:     "Ninja Van",
+    logo:     "🥷",
+    tagline:  "Fast & reliable",
+    rate:     85,
+    eta:      "2–4 business days",
+    features: ["Door-to-door", "Signature required", "SMS updates"],
+  },
+  {
+    id:       "lbc",
+    name:     "LBC Express",
+    logo:     "🔵",
+    tagline:  "Trusted since 1945",
+    rate:     120,
+    eta:      "2–4 business days",
+    features: ["Nationwide branches", "Package insurance", "Express option"],
+  },
+  {
+    id:       "jrs",
+    name:     "JRS Express",
+    logo:     "🟩",
+    tagline:  "Provincial specialist",
+    rate:     100,
+    eta:      "3–6 business days",
+    features: ["Provincial coverage", "Affordable rates", "Bus cargo option"],
+  },
+  {
+    id:       "2go",
+    name:     "2GO Express",
+    logo:     "🚢",
+    tagline:  "For larger packages",
+    rate:     150,
+    eta:      "4–7 business days",
+    features: ["Heavy items", "Island delivery", "Cargo service"],
+  },
+  {
+    id:       "grab",
+    name:     "GrabExpress",
+    logo:     "🟢",
+    tagline:  "Same-day delivery",
+    rate:     60,
+    eta:      "Same day (Metro Manila)",
+    features: ["Instant dispatch", "Live GPS tracking", "Metro Manila only"],
+  },
+  {
+    id:       "lalamove",
+    name:     "Lalamove",
+    logo:     "🟠",
+    tagline:  "On-demand courier",
+    rate:     55,
+    eta:      "Same day (select cities)",
+    features: ["On-demand booking", "Multiple vehicle types", "Business rates"],
+  },
+];
+
 const PAYMENT_METHODS = [
-  { id: "COD",           label: "Cash on Delivery",  icon: "💵", fields: [] },
-  { id: "GCash",         label: "GCash",              icon: "📱", fields: [{ key: "gcashNumber",  label: "GCash Mobile Number", placeholder: "09XX XXX XXXX", type: "tel" }] },
-  { id: "Maya",          label: "Maya (PayMaya)",     icon: "💜", fields: [{ key: "mayaNumber",   label: "Maya Mobile Number",  placeholder: "09XX XXX XXXX", type: "tel" }] },
-  { id: "Bank Transfer", label: "Bank Transfer",      icon: "🏦", fields: [
+  { id: "COD",           label: "Cash on Delivery",    icon: "💵", fields: [] },
+  { id: "GCash",         label: "GCash",               icon: "📱", fields: [{ key: "gcashNumber",  label: "GCash Mobile Number", placeholder: "09XX XXX XXXX", type: "tel" }] },
+  { id: "Maya",          label: "Maya (PayMaya)",      icon: "💜", fields: [{ key: "mayaNumber",   label: "Maya Mobile Number",  placeholder: "09XX XXX XXXX", type: "tel" }] },
+  { id: "Bank Transfer", label: "Bank Transfer",       icon: "🏦", fields: [
     { key: "bankName",      label: "Bank Name",      placeholder: "BDO, BPI, Metrobank…", type: "text" },
     { key: "accountName",   label: "Account Name",   placeholder: "Account holder name",  type: "text" },
     { key: "accountNumber", label: "Account Number", placeholder: "Account number",       type: "text" },
@@ -31,7 +98,8 @@ export default function CheckoutPage() {
 
   const [step,       setStep]       = useState(1);
   const [payment,    setPayment]    = useState("COD");
-  const [delivery,   setDelivery]   = useState("Delivery");
+  const [delivery,   setDelivery]   = useState("Delivery"); // "Delivery" or "Pickup"
+  const [courierId,  setCourierId]  = useState("jnt");      // selected courier
   const [payFields,  setPayFields]  = useState({});
   const [address,    setAddress]    = useState(user?.address || "");
   const [addingAddr, setAddingAddr] = useState(false);
@@ -40,10 +108,11 @@ export default function CheckoutPage() {
   const [done,       setDone]       = useState(false);
   const [txId,       setTxId]       = useState("");
 
-  const subtotal    = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const shipping    = delivery === "Pickup" ? 0 : 120;
-  const total       = subtotal + shipping;
-  const selectedPay = PAYMENT_METHODS.find((p) => p.id === payment);
+  const selectedCourier = COURIERS.find((c) => c.id === courierId) || COURIERS[0];
+  const shippingFee     = delivery === "Pickup" ? 0 : selectedCourier.rate;
+  const subtotal        = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const total           = subtotal + shippingFee;
+  const selectedPay     = PAYMENT_METHODS.find((p) => p.id === payment);
 
   const inp = {
     width: "100%", border: "2px solid #E5EDE5", borderRadius: 12,
@@ -53,7 +122,16 @@ export default function CheckoutPage() {
 
   const placeOrder = () => {
     const id = "TXN-" + Date.now();
-    addTransaction({ id, date: new Date().toLocaleString(), items: [...cart], total, method: payment, delivery, address, status: "Pending" });
+    addTransaction({
+      id,
+      date:     new Date().toLocaleString(),
+      items:    [...cart],
+      total,
+      method:   payment,
+      delivery: delivery === "Pickup" ? "Store Pickup" : selectedCourier.name,
+      address,
+      status:   "Pending",
+    });
     clearCart();
     setTxId(id);
     setDone(true);
@@ -78,31 +156,34 @@ export default function CheckoutPage() {
       <Navbar />
 
       <style>{`
-        /* Order summary: full width on mobile, sidebar on desktop */
-        .co-wrap {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
+        /* ── Checkout layout ── */
+        .co-wrap { display: flex; flex-direction: column; gap: 20px; }
         @media (min-width: 768px) {
-          .co-wrap {
-            flex-direction: row;
-            align-items: flex-start;
-            gap: 24px;
-          }
+          .co-wrap { flex-direction: row; align-items: flex-start; gap: 24px; }
           .co-main    { flex: 1; min-width: 0; }
           .co-sidebar { width: 300px; flex-shrink: 0; position: sticky; top: 80px; }
         }
 
-        /* Credit card fields: 2-col on wider mobile */
+        /* ── Courier grid ── */
+        .courier-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 10px;
+          margin-bottom: 20px;
+        }
+        @media (min-width: 560px) {
+          .courier-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        /* ── Credit card grid ── */
         .co-card-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
         @media (min-width: 440px) { .co-card-grid { grid-template-columns: 1fr 1fr; } }
 
-        /* Step label: hide on tiny phones */
+        /* ── Step label ── */
         .co-step-lbl { display: none; font-size: 10px; }
         @media (min-width: 360px) { .co-step-lbl { display: block; } }
 
-        /* Bottom spacer for mobile bottom nav */
+        /* ── Mobile bottom spacer ── */
         .co-spacer { height: 80px; }
         @media (min-width: 768px) { .co-spacer { display: none; } }
       `}</style>
@@ -114,7 +195,7 @@ export default function CheckoutPage() {
             Checkout
           </h1>
 
-          {/* ── STEP INDICATOR ── */}
+          {/* ── Step indicator ── */}
           <div style={{ display: "flex", alignItems: "center", marginBottom: 24 }}>
             {STEPS.map((s, i) => (
               <div key={s} style={{ display: "flex", alignItems: "center", flex: i < STEPS.length - 1 ? 1 : "none" }}>
@@ -140,21 +221,21 @@ export default function CheckoutPage() {
             ))}
           </div>
 
-          {/* ── MAIN WRAP ── */}
           <div className="co-wrap">
-
-            {/* ── STEP CONTENT ── */}
             <div className="co-main">
 
-              {/* STEP 1 — DELIVERY */}
+              {/* ════════════════════════════════
+                  STEP 1 — DELIVERY
+              ════════════════════════════════ */}
               {step === 1 && (
                 <div style={{ background: "#fff", borderRadius: 20, padding: "clamp(16px,5vw,26px)", boxShadow: "var(--shadow-sm)" }} className="animate-fadeSlideUp">
                   <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 800, color: "#0E2011", margin: "0 0 16px" }}>Delivery Method</h2>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+                  {/* Home delivery vs pickup toggle */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 24 }}>
                     {[
-                      { id: "Delivery", label: "Home Delivery", sub: "+₱120 · 3–5 days", icon: "🚚" },
-                      { id: "Pickup",   label: "Store Pickup",  sub: "FREE · Same day",  icon: "🏪" },
+                      { id: "Delivery", label: "Home Delivery", sub: "Choose a courier below", icon: "🚚" },
+                      { id: "Pickup",   label: "Store Pickup",  sub: "FREE · Same day",        icon: "🏪" },
                     ].map((d) => (
                       <button key={d.id} onClick={() => setDelivery(d.id)}
                         style={{ padding: "clamp(12px,3vw,16px)", borderRadius: 14, border: `2.5px solid ${delivery === d.id ? "#0E2011" : "#E5EDE5"}`, background: delivery === d.id ? "#E8FFD0" : "#fff", textAlign: "left", cursor: "pointer", fontFamily: "var(--font-body)", transition: "all 0.18s", WebkitTapHighlightColor: "transparent" }}>
@@ -165,8 +246,79 @@ export default function CheckoutPage() {
                     ))}
                   </div>
 
+                  {/* ── Courier selection (only for home delivery) ── */}
                   {delivery === "Delivery" && (
                     <>
+                      <h3 style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, color: "#0E2011", margin: "0 0 12px" }}>
+                        Select Courier
+                      </h3>
+                      <div className="courier-grid">
+                        {COURIERS.map((courier) => {
+                          const selected = courierId === courier.id;
+                          return (
+                            <button key={courier.id} onClick={() => setCourierId(courier.id)}
+                              style={{
+                                padding: "14px 16px", borderRadius: 14, textAlign: "left", cursor: "pointer",
+                                fontFamily: "var(--font-body)", WebkitTapHighlightColor: "transparent",
+                                border: `2.5px solid ${selected ? "#0E2011" : "#E5EDE5"}`,
+                                background: selected ? "#E8FFD0" : "#FAFFF5",
+                                transition: "all 0.18s",
+                                position: "relative",
+                              }}>
+                              {/* Selected checkmark */}
+                              {selected && (
+                                <div style={{ position: "absolute", top: 10, right: 10, width: 20, height: 20, background: "#0E2011", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <CheckCircle size={12} color="#A8FF3E" />
+                                </div>
+                              )}
+
+                              {/* Courier logo + name */}
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                <span style={{ fontSize: 22, flexShrink: 0 }}>{courier.logo}</span>
+                                <div>
+                                  <div style={{ fontWeight: 800, fontSize: 14, color: "#0E2011" }}>{courier.name}</div>
+                                  <div style={{ fontSize: 11, color: "#888" }}>{courier.tagline}</div>
+                                </div>
+                              </div>
+
+                              {/* Rate + ETA */}
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                                <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 16, color: selected ? "#0E2011" : "#1A7A2E" }}>
+                                  ₱{courier.rate}
+                                </span>
+                                <span style={{ fontSize: 10, color: "#888", textAlign: "right", maxWidth: 120 }}>
+                                  {courier.eta}
+                                </span>
+                              </div>
+
+                              {/* Feature pills */}
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {courier.features.map((f) => (
+                                  <span key={f} style={{ fontSize: 9, fontWeight: 700, background: selected ? "rgba(14,32,17,0.08)" : "#E8EDE8", color: selected ? "#0E2011" : "#666", borderRadius: 999, padding: "2px 7px" }}>
+                                    {f}
+                                  </span>
+                                ))}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Selected courier summary strip */}
+                      <div style={{ background: "#0E2011", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 20 }}>{selectedCourier.logo}</span>
+                          <div>
+                            <div style={{ color: "#fff", fontWeight: 700, fontSize: 13 }}>{selectedCourier.name}</div>
+                            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>{selectedCourier.eta}</div>
+                          </div>
+                        </div>
+                        <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 18, color: "#A8FF3E" }}>
+                          ₱{selectedCourier.rate}
+                        </div>
+                      </div>
+
+                      {/* Delivery address */}
                       <h3 style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, color: "#0E2011", margin: "0 0 10px" }}>Delivery Address</h3>
                       {savedAddrs.length > 0 && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
@@ -211,6 +363,7 @@ export default function CheckoutPage() {
                     </>
                   )}
 
+                  {/* Pickup info */}
                   {delivery === "Pickup" && (
                     <div style={{ background: "#F5F9F0", borderRadius: 12, padding: "14px 16px", marginBottom: 4 }}>
                       <div style={{ fontWeight: 700, fontSize: 14, color: "#0E2011", marginBottom: 3 }}>📍 CoirCraft Store</div>
@@ -227,7 +380,9 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {/* STEP 2 — PAYMENT */}
+              {/* ════════════════════════════════
+                  STEP 2 — PAYMENT
+              ════════════════════════════════ */}
               {step === 2 && (
                 <div style={{ background: "#fff", borderRadius: 20, padding: "clamp(16px,5vw,26px)", boxShadow: "var(--shadow-sm)" }} className="animate-fadeSlideUp">
                   <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 800, color: "#0E2011", margin: "0 0 16px" }}>Payment Method</h2>
@@ -245,7 +400,7 @@ export default function CheckoutPage() {
                   </div>
 
                   {selectedPay?.fields.length > 0 && (
-                    <div style={{ background: "#F5F9F0", borderRadius: 14, padding: "16px", marginBottom: 16 }}>
+                    <div style={{ background: "#F5F9F0", borderRadius: 14, padding: 16, marginBottom: 16 }}>
                       <div style={{ fontWeight: 700, fontSize: 13, color: "#0E2011", marginBottom: 12 }}>
                         {selectedPay.icon} {selectedPay.label} Details
                       </div>
@@ -268,7 +423,7 @@ export default function CheckoutPage() {
 
                   <div style={{ display: "flex", gap: 10 }}>
                     <button onClick={() => setStep(1)}
-                      style={{ flex: 1, background: "#fff", border: "2px solid #E5EDE5", borderRadius: 999, padding: "13px 8px", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 14, cursor: "pointer", color: "#555", WebkitTapHighlightColor: "transparent" }}>
+                      style={{ flex: 1, background: "#fff", border: "2px solid #E5EDE5", borderRadius: 999, padding: "13px 8px", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 14, cursor: "pointer", color: "#555" }}>
                       ← Back
                     </button>
                     <button className="tk-btn-cta" onClick={() => setStep(3)} style={{ flex: 2, textAlign: "center" }}>
@@ -278,11 +433,14 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {/* STEP 3 — REVIEW */}
+              {/* ════════════════════════════════
+                  STEP 3 — REVIEW & PLACE
+              ════════════════════════════════ */}
               {step === 3 && (
                 <div style={{ background: "#fff", borderRadius: 20, padding: "clamp(16px,5vw,26px)", boxShadow: "var(--shadow-sm)" }} className="animate-fadeSlideUp">
                   <h2 style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 800, color: "#0E2011", margin: "0 0 16px" }}>Review Your Order</h2>
 
+                  {/* Items */}
                   <div style={{ marginBottom: 16 }}>
                     {cart.map((i) => (
                       <div key={i.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #F0F0EC", gap: 10 }}>
@@ -299,11 +457,19 @@ export default function CheckoutPage() {
                     ))}
                   </div>
 
+                  {/* Delivery + Payment summary */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
                     <div style={{ background: "#F5F9F0", borderRadius: 10, padding: "11px 13px" }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: "#aaa", textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>Delivery</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#0E2011" }}>{delivery}</div>
-                      {delivery === "Delivery" && <div style={{ fontSize: 11, color: "#888", marginTop: 2, wordBreak: "break-word" }}>{address}</div>}
+                      <div style={{ fontSize: 10, fontWeight: 800, color: "#aaa", textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>Courier</div>
+                      {delivery === "Pickup" ? (
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#0E2011" }}>🏪 Store Pickup</div>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#0E2011" }}>{selectedCourier.logo} {selectedCourier.name}</div>
+                          <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>{selectedCourier.eta}</div>
+                          {address && <div style={{ fontSize: 11, color: "#666", marginTop: 4, wordBreak: "break-word" }}>{address}</div>}
+                        </>
+                      )}
                     </div>
                     <div style={{ background: "#F5F9F0", borderRadius: 10, padding: "11px 13px" }}>
                       <div style={{ fontSize: 10, fontWeight: 800, color: "#aaa", textTransform: "uppercase", letterSpacing: 1, marginBottom: 3 }}>Payment</div>
@@ -311,9 +477,27 @@ export default function CheckoutPage() {
                     </div>
                   </div>
 
+                  {/* Cost breakdown */}
+                  <div style={{ background: "#F5F9F0", borderRadius: 12, padding: "14px 16px", marginBottom: 18 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#666", marginBottom: 6 }}>
+                      <span>Subtotal</span>
+                      <span style={{ fontWeight: 600 }}>₱{subtotal.toLocaleString()}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#666", marginBottom: 10, paddingBottom: 10, borderBottom: "1px solid #E8EDE8" }}>
+                      <span>Shipping ({delivery === "Pickup" ? "Store Pickup" : selectedCourier.name})</span>
+                      <span style={{ fontWeight: 600, color: shippingFee === 0 ? "#1A7A2E" : "#555" }}>
+                        {shippingFee === 0 ? "FREE 🎉" : `₱${shippingFee}`}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 18, color: "#0E2011" }}>
+                      <span>Total</span>
+                      <span>₱{total.toLocaleString()}</span>
+                    </div>
+                  </div>
+
                   <div style={{ display: "flex", gap: 10 }}>
                     <button onClick={() => setStep(2)}
-                      style={{ flex: 1, background: "#fff", border: "2px solid #E5EDE5", borderRadius: 999, padding: "13px 8px", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 14, cursor: "pointer", color: "#555", WebkitTapHighlightColor: "transparent" }}>
+                      style={{ flex: 1, background: "#fff", border: "2px solid #E5EDE5", borderRadius: 999, padding: "13px 8px", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 14, cursor: "pointer", color: "#555" }}>
                       ← Back
                     </button>
                     <button className="tk-btn-cta" onClick={placeOrder} style={{ flex: 2, textAlign: "center" }}>
@@ -324,8 +508,8 @@ export default function CheckoutPage() {
               )}
             </div>
 
-            {/* ── ORDER SUMMARY SIDEBAR ── */}
-            <div className="co-sidebar" style={{ background: "#fff", borderRadius: 20, padding: "20px", boxShadow: "var(--shadow-sm)", border: "1.5px solid #F0F0EC" }}>
+            {/* ── Order summary sidebar ── */}
+            <div className="co-sidebar" style={{ background: "#fff", borderRadius: 20, padding: 20, boxShadow: "var(--shadow-sm)", border: "1.5px solid #F0F0EC" }}>
               <h3 style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 800, color: "#0E2011", margin: "0 0 14px" }}>
                 Order Summary
               </h3>
@@ -342,12 +526,28 @@ export default function CheckoutPage() {
                   <span>Subtotal</span>
                   <span style={{ fontWeight: 600 }}>₱{subtotal.toLocaleString()}</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#888", marginBottom: 12 }}>
-                  <span>Shipping</span>
-                  <span style={{ fontWeight: 600, color: shipping === 0 ? "#1A7A2E" : "#555" }}>
-                    {shipping === 0 ? "FREE 🎉" : `₱${shipping}`}
+
+                {/* Dynamic shipping row */}
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#888", marginBottom: 6 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    Shipping
+                    {delivery === "Delivery" && (
+                      <span style={{ background: "#E8FFD0", color: "#1A7A2E", fontSize: 9, fontWeight: 800, padding: "1px 6px", borderRadius: 999 }}>
+                        {selectedCourier.name}
+                      </span>
+                    )}
+                  </span>
+                  <span style={{ fontWeight: 600, color: shippingFee === 0 ? "#1A7A2E" : "#555" }}>
+                    {shippingFee === 0 ? "FREE" : `₱${shippingFee}`}
                   </span>
                 </div>
+
+                {delivery === "Delivery" && (
+                  <div style={{ fontSize: 11, color: "#aaa", marginBottom: 10 }}>
+                    ETA: {selectedCourier.eta}
+                  </div>
+                )}
+
                 <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 20, color: "#0E2011" }}>
                   <span>Total</span>
                   <span>₱{total.toLocaleString()}</span>

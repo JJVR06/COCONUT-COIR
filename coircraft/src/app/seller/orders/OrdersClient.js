@@ -19,16 +19,38 @@ export default function OrdersClient() {
   const { transactions, setTransactions } = useApp();
   const [filter,   setFilter]   = useState("All");
   const [expanded, setExpanded] = useState(null);
+  const [updating, setUpdating] = useState(null); // tracks which order is being saved
 
   const tabs     = ["All", "Pending", "Confirmed", "Shipped", "Delivered", "Received", "Cancelled"];
   const filtered = filter === "All"
     ? [...transactions].reverse()
     : [...transactions].reverse().filter((t) => t.status === filter);
 
-  const updateStatus = (txId, newStatus) => {
+  // ── Persist status change to DB so buyer sees the update immediately ──────
+  const updateStatus = async (txId, newStatus) => {
+    // 1. Optimistic update — UI changes instantly
     setTransactions((prev) =>
       prev.map((t) => t.id === txId ? { ...t, status: newStatus } : t)
     );
+
+    // 2. Persist to database so the buyer's page reflects the change
+    setUpdating(txId);
+    try {
+      const res = await fetch("/api/orders", {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ id: txId, status: newStatus }),
+      });
+      if (!res.ok) throw new Error("Failed to update order");
+    } catch (err) {
+      // Revert optimistic update on failure
+      console.error("Order update failed:", err);
+      setTransactions((prev) =>
+        prev.map((t) => t.id === txId ? { ...t, status: "Pending" } : t)
+      );
+    } finally {
+      setUpdating(null);
+    }
   };
 
   const cancelOrder = (txId) => updateStatus(txId, "Cancelled");
@@ -36,20 +58,38 @@ export default function OrdersClient() {
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
       <SellerSidebar />
-      <main style={{ flex: 1, background: "#F8F9FA", padding: 32, overflowY: "auto" }}>
+      <main className="seller-page-main" style={{ flex: 1, background: "#F8F9FA", overflowY: "auto" }}>
+        <style>{`
+          .seller-page-main { padding: 32px; }
+          @media (max-width: 1023px) {
+            .seller-page-main { padding: 80px 16px 100px !important; }
+          }
+          .orders-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 14px;
+            margin-bottom: 28px;
+          }
+          @media (max-width: 479px) {
+            .orders-summary-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+          }
+          .orders-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+          .order-row-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+          .order-row-meta { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; flex-wrap: wrap; gap: 12px; }
+        `}</style>
 
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 800, color: "#0E2011", margin: "0 0 4px" }}>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(20px,4vw,26px)", fontWeight: 800, color: "#0E2011", margin: "0 0 4px" }}>
             Order Management
           </h1>
           <p style={{ color: "#888", fontSize: 14, margin: 0 }}>
-            Update order statuses and view order details.
+            Updating an order here instantly reflects on the buyer&apos;s orders page.
           </p>
         </div>
 
         {/* Summary cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 14, marginBottom: 28 }}>
+        <div className="orders-summary-grid">
           {[
             { label: "Total",     value: transactions.length,                                          color: "#1A7A2E" },
             { label: "Pending",   value: transactions.filter((t) => t.status === "Pending").length,   color: "#856404" },
@@ -64,7 +104,7 @@ export default function OrdersClient() {
         </div>
 
         {/* Filter tabs */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        <div className="orders-tabs">
           {tabs.map((tab) => {
             const count = tab === "All" ? null : transactions.filter((t) => t.status === tab).length;
             return (
@@ -85,14 +125,15 @@ export default function OrdersClient() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {filtered.map((tx) => {
-              const ss     = STATUS_STYLE[tx.status] || STATUS_STYLE.Pending;
-              const isOpen = expanded === tx.id;
+              const ss      = STATUS_STYLE[tx.status] || STATUS_STYLE.Pending;
+              const isOpen  = expanded === tx.id;
+              const isSaving = updating === tx.id;
 
               return (
-                <div key={tx.id} style={{ background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 12px rgba(14,32,17,0.06)", border: `1px solid ${isOpen ? "#A8FF3E" : "transparent"}`, transition: "border-color 0.2s" }}>
+                <div key={tx.id} style={{ background: "#fff", borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 12px rgba(14,32,17,0.06)", border: `1px solid ${isOpen ? "#A8FF3E" : "transparent"}`, transition: "border-color 0.2s", opacity: isSaving ? 0.75 : 1 }}>
 
                   {/* Row header */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", flexWrap: "wrap", gap: 12 }}>
+                  <div className="order-row-meta">
 
                     {/* Left: ID + date */}
                     <div>
@@ -100,8 +141,8 @@ export default function OrdersClient() {
                       <div style={{ fontSize: 12, color: "#aaa", marginTop: 2 }}>{tx.date} · {tx.method} · {tx.delivery}</div>
                     </div>
 
-                    {/* Right: total + status badge + action buttons */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    {/* Right: total + status + actions */}
+                    <div className="order-row-actions">
 
                       <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 16, color: "#0E2011" }}>
                         ₱{(tx.total || 0).toLocaleString()}
@@ -109,27 +150,29 @@ export default function OrdersClient() {
 
                       {/* Status badge */}
                       <span style={{ background: ss.bg, color: ss.color, borderRadius: 50, padding: "5px 14px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
-                        {tx.status}
+                        {isSaving ? "Saving…" : tx.status}
                       </span>
 
-                      {/* Advance status button */}
+                      {/* Advance status button — disabled while saving */}
                       {ss.next && (
                         <button
+                          disabled={isSaving}
                           onClick={() => updateStatus(tx.id, ss.next)}
-                          style={{ background: "#0E2011", color: "#A8FF3E", border: "none", borderRadius: 50, padding: "7px 16px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "var(--font-body)", whiteSpace: "nowrap", transition: "all 0.15s" }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = "#1A7A2E"}
-                          onMouseLeave={(e) => e.currentTarget.style.background = "#0E2011"}>
+                          style={{ background: isSaving ? "#ccc" : "#0E2011", color: "#A8FF3E", border: "none", borderRadius: 50, padding: "7px 16px", fontSize: 11, fontWeight: 700, cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "var(--font-body)", whiteSpace: "nowrap", transition: "all 0.15s" }}
+                          onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = "#1A7A2E"; }}
+                          onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = "#0E2011"; }}>
                           → Mark {ss.next}
                         </button>
                       )}
 
-                      {/* Cancel button — only for non-final statuses */}
+                      {/* Cancel button */}
                       {!["Delivered","Received","Cancelled"].includes(tx.status) && (
                         <button
+                          disabled={isSaving}
                           onClick={() => cancelOrder(tx.id)}
-                          style={{ background: "#FFF0F0", color: "#C62828", border: "1.5px solid #FFCDD2", borderRadius: 50, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "var(--font-body)", whiteSpace: "nowrap", transition: "all 0.15s" }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = "#FFCDD2"}
-                          onMouseLeave={(e) => e.currentTarget.style.background = "#FFF0F0"}>
+                          style={{ background: "#FFF0F0", color: "#C62828", border: "1.5px solid #FFCDD2", borderRadius: 50, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: isSaving ? "not-allowed" : "pointer", fontFamily: "var(--font-body)", whiteSpace: "nowrap", transition: "all 0.15s", opacity: isSaving ? 0.5 : 1 }}
+                          onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = "#FFCDD2"; }}
+                          onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = "#FFF0F0"; }}>
                           Cancel
                         </button>
                       )}
@@ -171,14 +214,14 @@ export default function OrdersClient() {
 
                       {/* Delivery address */}
                       {tx.address && (
-                        <div style={{ background: "#F0F9EC", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#555", display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ background: "#F0F9EC", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#555", display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
                           <span>📍</span>
                           <span>{tx.address}</span>
                         </div>
                       )}
 
                       {/* Status flow indicator */}
-                      <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
                         {STATUS_FLOW.slice(0, 4).map((s, i) => {
                           const idx     = STATUS_FLOW.indexOf(tx.status);
                           const done    = STATUS_FLOW.indexOf(s) <= idx && tx.status !== "Cancelled";
@@ -186,7 +229,7 @@ export default function OrdersClient() {
                           return (
                             <div key={s} style={{ display: "flex", alignItems: "center", flex: i < 3 ? 1 : "none" }}>
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                                <div style={{ width: 28, height: 28, borderRadius: "50%", background: done ? "#0E2011" : "#E8EDE8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, border: current ? "3px solid #A8FF3E" : "none" }}>
+                                <div style={{ width: 28, height: 28, borderRadius: "50%", background: done ? "#0E2011" : "#E8EDE8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, border: current ? "3px solid #A8FF3E" : "none", flexShrink: 0 }}>
                                   {done ? <span style={{ color: "#A8FF3E" }}>✓</span> : <span style={{ color: "#aaa" }}>{i + 1}</span>}
                                 </div>
                                 <span style={{ fontSize: 10, color: done ? "#0E2011" : "#aaa", fontWeight: 700, whiteSpace: "nowrap" }}>{s}</span>
@@ -203,6 +246,8 @@ export default function OrdersClient() {
             })}
           </div>
         )}
+
+        <div style={{ height: 72 }} />
       </main>
     </div>
   );

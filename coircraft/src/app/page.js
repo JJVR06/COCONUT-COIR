@@ -25,6 +25,29 @@ function Reveal({ children, delay = 0 }) {
   return <div ref={ref}>{children}</div>;
 }
 
+/* ── Product grid skeleton ── */
+function ProductGridSkeleton({ count = 4 }) {
+  return (
+    <>
+      <style>{`
+        @keyframes skeletonShimmer { from{background-position:-400px 0} to{background-position:400px 0} }
+        .tk-skeleton-card {
+          background: linear-gradient(90deg,#E8F0E0 25%,#F2FAF0 50%,#E8F0E0 75%);
+          background-size: 800px 100%;
+          animation: skeletonShimmer 1.6s linear infinite;
+          border-radius: 20px;
+          aspect-ratio: 3/4;
+        }
+      `}</style>
+      <div className="tk-grid-products">
+        {Array.from({ length: count }).map((_, i) => (
+          <div key={i} className="tk-skeleton-card" />
+        ))}
+      </div>
+    </>
+  );
+}
+
 const CATS = [
   { label: "Garden",       icon: "🌱" },
   { label: "Home",         icon: "🏠" },
@@ -33,7 +56,7 @@ const CATS = [
 ];
 
 export default function Home() {
-  const { user, inventory, storefront } = useApp();
+  const { user, inventory, inventoryLoaded, storefront } = useApp();
 
   const products = Array.isArray(inventory) ? inventory : [];
   const sf       = storefront || {};
@@ -107,25 +130,13 @@ export default function Home() {
 
             <style>{`
               .hero-badges {
-                display: flex;
-                gap: 14px;
-                justify-content: flex-end;
-                flex-wrap: nowrap;      /* single row — no staircase */
-                margin-top: 28px;
-                width: 100%;
+                display: flex; gap: 14px; justify-content: flex-end;
+                flex-wrap: nowrap; margin-top: 28px; width: 100%;
               }
               @media (min-width: 600px) {
-                .hero-badges {
-                  justify-content: center;
-                  gap: clamp(16px,4vw,44px);
-                }
+                .hero-badges { justify-content: center; gap: clamp(16px,4vw,44px); }
               }
-              /* Shrink icon box on tiny screens so 3 fit in one row */
-              .hero-badge-icon {
-                width: 36px;
-                height: 36px;
-                font-size: 16px;
-              }
+              .hero-badge-icon  { width: 36px; height: 36px; font-size: 16px; }
               .hero-badge-title { font-size: 12px; }
               .hero-badge-sub   { font-size: 10px; }
               @media (min-width: 400px) {
@@ -170,8 +181,8 @@ export default function Home() {
           </section>
         </Reveal>
 
-        {/* ── Featured Products (controlled by storefront.showFeatured) ── */}
-        {(sf.showFeatured !== false) && featured.length > 0 && (
+        {/* ── Featured Products ── */}
+        {(sf.showFeatured !== false) && (
           <Reveal delay={50}>
             <section className="tk-section" style={{ paddingTop: 16 }}>
               <div className="tk-container">
@@ -188,9 +199,20 @@ export default function Home() {
                     View All →
                   </Link>
                 </div>
-                <div className="tk-grid-products">
-                  {featured.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
-                </div>
+
+                {/* Show skeleton while loading, real cards once ready */}
+                {!inventoryLoaded ? (
+                  <ProductGridSkeleton count={4} />
+                ) : featured.length > 0 ? (
+                  <div className="tk-grid-products">
+                    {featured.map((p, i) => <ProductCard key={p.id} product={p} index={i} />)}
+                  </div>
+                ) : (
+                  /* No featured products yet — silent empty state so layout doesn't shift */
+                  <div style={{ textAlign: "center", padding: "32px 0", color: "#ccc", fontSize: 13 }}>
+                    No featured products yet.
+                  </div>
+                )}
               </div>
             </section>
           </Reveal>
@@ -227,8 +249,8 @@ export default function Home() {
           </section>
         </Reveal>
 
-        {/* ── New Arrivals (controlled by storefront.showNewArrivals) ── */}
-        {(sf.showNewArrivals !== false) && newArr.length > 0 && (
+        {/* ── New Arrivals ── */}
+        {(sf.showNewArrivals !== false) && (
           <Reveal delay={50}>
             <section className="tk-section" style={{ paddingTop: 0 }}>
               <div className="tk-container">
@@ -245,9 +267,18 @@ export default function Home() {
                     See All →
                   </Link>
                 </div>
-                <div className="tk-grid-products">
-                  {newArr.map((p, i) => <ProductCard key={p.id} product={p} index={i + 4} />)}
-                </div>
+
+                {!inventoryLoaded ? (
+                  <ProductGridSkeleton count={4} />
+                ) : newArr.length > 0 ? (
+                  <div className="tk-grid-products">
+                    {newArr.map((p, i) => <ProductCard key={p.id} product={p} index={i + 4} />)}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: "center", padding: "32px 0", color: "#ccc", fontSize: 13 }}>
+                    No new arrivals yet.
+                  </div>
+                )}
               </div>
             </section>
           </Reveal>
@@ -273,7 +304,7 @@ export default function Home() {
           </Reveal>
         )}
 
-        {/* ── Testimonials (controlled by storefront.showTestimonials) ── */}
+        {/* ── Testimonials ── */}
         {(sf.showTestimonials !== false) && (
           <Reveal>
             <section className="tk-section" style={{ background: "#F0FFD9" }}>
