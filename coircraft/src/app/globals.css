@@ -29,18 +29,14 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /*
-  Scroll fix:
-  - overflow-x: hidden on html clips horizontal bleed from fixed/transformed
-    elements like the mobile drawer (translateX(110%)) that otherwise cause
-    a horizontal scrollbar which locks vertical scrolling.
-  - body has NO overflow — this keeps body as the natural vertical scroll
-    root so the scroll wheel works correctly.
-  - Only ONE element owns overflow at a time to avoid double scrollbars.
+  Scroll fix — DO NOT touch overflow on html or body.
+  Both stay at their browser defaults so the viewport is the natural
+  scroll root and the scroll wheel always works.
+  Horizontal bleed is clipped by #app-root (see layout.js).
 */
 html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
-  overflow-x: hidden;
 }
 body {
   background: var(--tk-bg);
@@ -48,6 +44,14 @@ body {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   line-height: 1.6;
+}
+
+/* Clip horizontal overflow at the app wrapper level, not html/body */
+#app-root {
+  overflow-x: clip;
+  /* clip (not hidden) so position:fixed children like the navbar and
+     mobile drawer are NOT affected — they still escape the clip boundary
+     and render correctly over the viewport */
 }
 img { max-width: 100%; display: block; }
 button { font-family: inherit; }
