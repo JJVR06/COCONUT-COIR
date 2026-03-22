@@ -3,7 +3,6 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 
 const AppContext = createContext(null);
 
-// localStorage helpers — only for session (user login + seller)
 function ls_read(key, fallback) {
   try { const v = localStorage.getItem(key); return v !== null ? JSON.parse(v) : fallback; }
   catch { return fallback; }
@@ -15,6 +14,21 @@ function ls_remove(key) {
   try { localStorage.removeItem(key); } catch {}
 }
 
+const DEFAULT_STOREFRONT = {
+  heroTitle:        "Premium Philippine\nCoconut Coir Products",
+  heroSubtitle:     "Eco-friendly, sustainably sourced from the Philippines.",
+  announcement:     "",
+  tagline:          "Premium eco-friendly coconut coir products made with love by Filipino artisans.",
+  name:             "CoirCraft Philippines",
+  address:          "123 Coir Avenue, Quezon City, Metro Manila",
+  hours:            "Mon–Sat: 8:00 AM – 6:00 PM",
+  contactEmail:     "InnoBytes@coircraft.ph",
+  contactPhone:     "+63 912 345 6789",
+  showFeatured:     true,
+  showNewArrivals:  true,
+  showTestimonials: true,
+};
+
 const DEFAULTS = {
   user:           null,
   sellerLoggedIn: false,
@@ -22,25 +36,32 @@ const DEFAULTS = {
   transactions:   [],
   wishlist:       [],
   reviews:        {},
+  inventory:      [],
+  storefront:     DEFAULT_STOREFRONT,
 };
 
 export function AppProvider({ children }) {
-  const [state,   setState]   = useState(DEFAULTS);
+  const [state,    setState]    = useState(DEFAULTS);
   const [hydrated, setHydrated] = useState(false);
 
   // ── HYDRATE SESSION FROM LOCALSTORAGE ON MOUNT ──
   useEffect(() => {
-    const user           = ls_read("cc_user",   null);
-    const sellerLoggedIn = ls_read("cc_seller", false);
-    setState((p) => ({ ...p, user, sellerLoggedIn }));
+    const user           = ls_read("cc_user",       null);
+    const sellerLoggedIn = ls_read("cc_seller",     false);
+    const storefront     = ls_read("cc_storefront", DEFAULT_STOREFRONT);
+    setState((p) => ({ ...p, user, sellerLoggedIn, storefront }));
     setHydrated(true);
+  }, []);
+
+  // ── LOAD INVENTORY FROM DB ON MOUNT ──
+  useEffect(() => {
+    loadInventoryFromDB();
   }, []);
 
   // ── LOAD ALL USER DATA FROM DATABASE WHEN USER LOGS IN ──
   useEffect(() => {
     if (!hydrated) return;
     if (!state.user?.email) {
-      // Clear all data on logout
       setState((p) => ({ ...p, cart: [], transactions: [], wishlist: [], reviews: {} }));
       return;
     }
@@ -51,13 +72,21 @@ export function AppProvider({ children }) {
   }, [state.user?.email, hydrated]);
 
   // ── DB LOADERS ──
+  const loadInventoryFromDB = async () => {
+    try {
+      const res  = await fetch("/api/products");
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setState((p) => ({ ...p, inventory: data }));
+      }
+    } catch {}
+  };
+
   const loadCartFromDB = async (email) => {
     try {
       const res  = await fetch(`/api/cart?email=${encodeURIComponent(email)}`);
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setState((p) => ({ ...p, cart: data }));
-      }
+      if (Array.isArray(data)) setState((p) => ({ ...p, cart: data }));
     } catch {}
   };
 
@@ -65,9 +94,7 @@ export function AppProvider({ children }) {
     try {
       const res  = await fetch(`/api/wishlist?email=${encodeURIComponent(email)}`);
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setState((p) => ({ ...p, wishlist: data }));
-      }
+      if (Array.isArray(data)) setState((p) => ({ ...p, wishlist: data }));
     } catch {}
   };
 
@@ -102,12 +129,24 @@ export function AppProvider({ children }) {
     setState((p) => ({ ...p, sellerLoggedIn: v }));
   }, []);
 
-  // ── CART — all DB, fallback to local for guests ──
+  // ── STOREFRONT ──
+  const setStorefront = useCallback((sf) => {
+    ls_write("cc_storefront", sf);
+    setState((p) => ({ ...p, storefront: sf }));
+  }, []);
+
+  // ── INVENTORY ──
+  const setInventory = useCallback((updater) => {
+    setState((p) => {
+      const inventory = typeof updater === "function" ? updater(p.inventory) : updater;
+      return { ...p, inventory };
+    });
+  }, []);
+
+  // ── CART ──
   const addToCart = useCallback(async (item) => {
     const email = state.user?.email;
-
     if (email) {
-      // Logged in — save to DB
       try {
         await fetch("/api/cart", {
           method: "POST",
@@ -118,8 +157,6 @@ export function AppProvider({ children }) {
         return;
       } catch {}
     }
-
-    // Guest — save to localStorage
     setState((p) => {
       const found = p.cart.find((i) => i.id === item.id);
       const cart  = found
@@ -203,10 +240,8 @@ export function AppProvider({ children }) {
           status:     "Pending",
         }),
       });
-      // Reload orders from DB to stay in sync
       if (email) await loadOrdersFromDB(email);
     } catch {
-      // Fallback to local state
       setState((p) => ({ ...p, transactions: [tx, ...p.transactions] }));
     }
   }, [state.user?.email]);
@@ -225,7 +260,6 @@ export function AppProvider({ children }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: txId, status: "Received" }),
       });
-      // Reload from DB
       if (state.user?.email) await loadOrdersFromDB(state.user.email);
     } catch {
       setState((p) => ({
@@ -251,7 +285,6 @@ export function AppProvider({ children }) {
         return;
       } catch {}
     }
-    // Guest fallback
     setState((p) => ({
       ...p,
       wishlist: p.wishlist.includes(productId)
@@ -279,7 +312,6 @@ export function AppProvider({ children }) {
           comment:    review.comment || "",
         }),
       });
-      // Refresh reviews from DB
       await getProductReviews(review.productId);
     } catch {}
   }, [state.user?.email]);
@@ -326,7 +358,11 @@ export function AppProvider({ children }) {
       transactions:   state.transactions,
       wishlist:       state.wishlist,
       reviews:        state.reviews,
+      inventory:      state.inventory,
+      storefront:     state.storefront,
       setUser, setSellerLoggedIn,
+      setStorefront,
+      setInventory,
       addToCart, removeFromCart, updateQty, clearCart,
       addTransaction, setTransactions, markReceived,
       toggleWishlist, isWishlisted,

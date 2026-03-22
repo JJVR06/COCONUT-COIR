@@ -1,18 +1,17 @@
 "use client";
+import { useApp } from "@/context/AppContext";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
-import { useApp } from "@/context/AppContext";
 
 const TAG_SECTIONS = [
-  { tag: "Best Seller", emoji: "🏆", label: "Best Sellers" },
-  { tag: "New",         emoji: "✨", label: "New Arrivals" },
-  { tag: "Trending",    emoji: "🔥", label: "Trending Now" },
-  { tag: "Featured",    emoji: "⭐", label: "Featured"     },
+  { tag: "Best Seller", emoji: "🏆", label: "Best Sellers"  },
+  { tag: "New",         emoji: "✨", label: "New Arrivals"  },
+  { tag: "Trending",    emoji: "🔥", label: "Trending Now"  },
+  { tag: "Featured",    emoji: "⭐", label: "Featured"      },
 ];
 
 export default function StorePage() {
-  // ── Read from context so seller inventory changes reflect immediately ──
   const { inventory, storefront } = useApp();
   const products = Array.isArray(inventory) ? inventory : [];
 
@@ -21,7 +20,7 @@ export default function StorePage() {
       <Navbar />
       <main style={{ background: "var(--tk-bg)", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
 
-        {/* Announcement banner (set by seller in Storefront tab) */}
+        {/* Announcement banner */}
         {storefront?.announcement && (
           <div style={{
             background: "linear-gradient(90deg,#0E2011,#1A472A)",
@@ -33,11 +32,7 @@ export default function StorePage() {
         )}
 
         {/* ── HERO ── */}
-        <section style={{
-          background: "linear-gradient(135deg,#1A472A 0%,#0E2011 55%,#1A5C2E 100%)",
-          padding: "clamp(48px,10vw,90px) 16px clamp(70px,12vw,120px)",
-          position: "relative", overflow: "hidden", textAlign: "center",
-        }}>
+        <section style={{ background: "linear-gradient(135deg,#1A472A 0%,#0E2011 55%,#1A5C2E 100%)", padding: "clamp(48px,10vw,90px) 16px clamp(70px,12vw,120px)", position: "relative", overflow: "hidden", textAlign: "center" }}>
           <div style={{ position: "absolute", top: "-20%", right: "-10%", width: "clamp(200px,40vw,400px)", height: "clamp(200px,40vw,400px)", background: "radial-gradient(circle,rgba(168,255,62,0.12) 0%,transparent 70%)", borderRadius: "50%", pointerEvents: "none" }} />
           <div style={{ position: "relative", zIndex: 1, maxWidth: 560, margin: "0 auto" }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(168,255,62,0.13)", border: "1px solid rgba(168,255,62,0.28)", borderRadius: 999, padding: "6px 16px", marginBottom: 18 }}>
@@ -55,6 +50,17 @@ export default function StorePage() {
         </section>
 
         <div className="tk-wave" />
+
+        {/* Loading skeleton */}
+        {products.length === 0 && (
+          <div className="tk-container" style={{ paddingTop: 40, paddingBottom: 40 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16 }}>
+              {[1,2,3,4].map((n) => (
+                <div key={n} className="tk-skeleton" style={{ borderRadius: 20, aspectRatio: "3/4" }} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── TAG SECTIONS ── */}
         {TAG_SECTIONS.map(({ tag, emoji, label }) => {
