@@ -26,10 +26,26 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" className={`${jakarta.variable} ${nunito.variable}`}>
       <body>
-        <AppProvider>
-          {children}
-          <MobileNavWrapper />
-        </AppProvider>
+        {/*
+          #app-root clips horizontal overflow (from the mobile drawer's
+          translateX(110%) off-screen position) WITHOUT touching html or body.
+
+          Why this works:
+          - html and body have NO overflow set — the browser keeps the viewport
+            as the natural scroll root, so the scroll wheel works on every page.
+          - overflow-x: clip on #app-root cuts off horizontal bleed from
+            transformed children (the slide-in drawer) but crucially does NOT
+            create a scroll container the way overflow:hidden would, so it
+            cannot produce a second scrollbar or lock vertical scrolling.
+          - position:fixed children (navbar, drawer, mobile nav) escape the
+            clip boundary and still render correctly over the full viewport.
+        */}
+        <div id="app-root">
+          <AppProvider>
+            {children}
+            <MobileNavWrapper />
+          </AppProvider>
+        </div>
       </body>
     </html>
   );
