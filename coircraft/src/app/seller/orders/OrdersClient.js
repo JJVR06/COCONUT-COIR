@@ -68,9 +68,7 @@ export default function OrdersClient() {
       <main className="seller-page-main" style={{ flex: 1, background: "#F8F9FA", overflowY: "auto" }}>
         <style>{`
           .seller-page-main { padding: 32px; }
-          @media (max-width: 1023px) {
-            .seller-page-main { padding: 80px 16px 100px !important; }
-          }
+          /* mobile padding handled by globals.css */
           .orders-summary-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));

@@ -241,7 +241,7 @@ export default function Navbar() {
                   href="/cart"
                   style={{
                     position: "relative", background: "#0E2011", borderRadius: "50%",
-                    width: 42, height: 42, display: "flex", alignItems: "center",
+                    width: 42, height: 42, minHeight: "unset", display: "flex", alignItems: "center",
                     justifyContent: "center", textDecoration: "none",
                     flexShrink: 0, WebkitTapHighlightColor: "transparent",
                   }}
@@ -267,7 +267,7 @@ export default function Navbar() {
                 aria-label="Open menu"
                 style={{
                   background: "#0E2011", border: "none", borderRadius: 12,
-                  width: 46, height: 46, cursor: "pointer", color: "#A8FF3E",
+                  width: 46, height: 46, minHeight: "unset", cursor: "pointer", color: "#A8FF3E",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   flexShrink: 0, WebkitTapHighlightColor: "transparent",
                   touchAction: "manipulation",

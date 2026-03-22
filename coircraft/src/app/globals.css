@@ -371,14 +371,48 @@ input:focus, select:focus, textarea:focus {
 
 /* ── MOBILE TOUCH IMPROVEMENTS ──────────────────────── */
 @media (max-width: 767px) {
-  /* Larger tap targets on mobile */
-  button, a, [role="button"] { min-height: 44px; }
+  /*
+    Apply min-height only to standalone action buttons and links —
+    NOT to icon buttons inside the navbar which have explicit fixed sizes.
+    Using a class-based approach so icon buttons (cart circle, hamburger)
+    are excluded and don't get stretched.
+  */
+  .tk-btn-cta,
+  .tk-btn-dark,
+  .tk-btn-outline-white,
+  .tk-filter { min-height: 44px; }
 
   /* Prevent text size adjustment on orientation change */
   html { -webkit-text-size-adjust: 100%; }
 
   /* Better focus ring for accessibility */
   :focus-visible { outline: 3px solid #A8FF3E; outline-offset: 3px; }
+}
+
+/* ── SELLER MOBILE SCROLL FIX ───────────────────────── */
+/*
+  On mobile the seller sidebar turns into a fixed top header + fixed bottom nav.
+  The main content area needs to scroll independently of those two fixed bars.
+  overflow-y: auto on the main element with the right padding ensures the
+  content is scrollable without being hidden behind the fixed elements.
+*/
+@media (max-width: 1023px) {
+  .seller-page-main {
+    position: relative;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    height: auto !important;
+    /* top padding = mobile header height (64px) */
+    padding-top: 72px !important;
+    /* bottom padding = bottom nav height (64px) + extra breathing room */
+    padding-bottom: 96px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    /* Make the element itself fill viewport height so it can scroll */
+    min-height: 100dvh;
+    box-sizing: border-box;
+  }
 }
 
 /* ── TABLET SPECIFIC ────────────────────────────────── */

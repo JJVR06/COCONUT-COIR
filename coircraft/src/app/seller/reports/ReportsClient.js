@@ -4,45 +4,148 @@ import SellerSidebar from "@/components/SellerSidebar";
 import { useApp } from "@/context/AppContext";
 
 /* ── Export helpers ─────────────────────────────────────────────────────── */
+
+/** Properly escape a CSV cell value */
+function escapeCSV(val) {
+  const str = String(val ?? "").replace(/"/g, '""');
+  // Wrap in quotes if it contains comma, newline, or quote
+  return /[",\n\r]/.test(str) ? `"${str}"` : str;
+}
+
+/**
+ * Download a proper RFC 4180 CSV file.
+ * Prepends a UTF-8 BOM (0xEF BB BF) so Excel auto-detects the encoding
+ * and renders Filipino characters (₱, accented letters) correctly.
+ */
 function downloadCSV(rows, filename) {
-  const csv  = rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const BOM = "\uFEFF";
+  const csv = BOM + rows.map((r) => r.map(escapeCSV).join(",")).join("\r\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement("a"), { href: url, download: filename });
+  const a    = Object.assign(document.createElement("a"), {
+    href: url,
+    download: filename,
+  });
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-function downloadExcel(headers, rows, filename) {
-  const trs  = [headers, ...rows].map((r) => "<tr>" + r.map((c) => `<td>${c ?? ""}</td>`).join("") + "</tr>").join("");
-  const html = `<html><head><meta charset="UTF-8"><style>td{border:1px solid #ccc;padding:6px}</style></head><body><table>${trs}</table></body></html>`;
-  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8;" });
-  const url  = URL.createObjectURL(blob);
-  const a    = Object.assign(document.createElement("a"), { href: url, download: filename });
-  a.click();
-  URL.revokeObjectURL(url);
+/**
+ * Download a real XLSX file using the SheetJS library loaded from CDN.
+ * This produces a genuine Office Open XML file that Excel opens without
+ * any corruption warning.
+ *
+ * Falls back to CSV if SheetJS fails to load (e.g. offline).
+ */
+async function downloadXLSX(headers, rows, filename) {
+  try {
+    // Dynamically load SheetJS from CDN — no build-time dependency
+    if (!window.XLSX) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+        script.onload  = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    const XLSX = window.XLSX;
+
+    // Build worksheet data — first row is headers
+    const wsData = [headers, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Auto-size columns (approximate)
+    const colWidths = headers.map((h, i) => {
+      const maxLen = Math.max(
+        String(h).length,
+        ...rows.map((r) => String(r[i] ?? "").length)
+      );
+      return { wch: Math.min(maxLen + 2, 40) };
+    });
+    ws["!cols"] = colWidths;
+
+    // Style the header row bold (SheetJS community doesn't support full styling,
+    // but the structure is correct and opens without error)
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Report");
+
+    XLSX.writeFile(wb, filename);
+  } catch (err) {
+    console.warn("SheetJS failed, falling back to CSV:", err);
+    // Fallback — rename to .csv so the user knows what they're getting
+    downloadCSV([headers, ...rows], filename.replace(".xlsx", ".csv"));
+  }
 }
 
-function ExportMenu({ label, headers, rows, csvFile, xlsFile }) {
+/* ── Export menu component ───────────────────────────────────────────────── */
+function ExportMenu({ label, headers, rows, csvFile, xlsxFile }) {
   const [open, setOpen] = useState(false);
+
   return (
     <div style={{ position: "relative" }}>
-      <button onClick={() => setOpen(!open)}
-        style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", color: "#0E2011", border: "2px solid #0E2011", borderRadius: 12, padding: "9px 18px", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: "#fff", color: "#0E2011",
+          border: "2px solid #0E2011", borderRadius: 12,
+          padding: "9px 18px", fontFamily: "var(--font-body)",
+          fontWeight: 700, fontSize: 12, cursor: "pointer",
+          transition: "all 0.18s",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "#E8FFD0"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}
+      >
         ⬇ Export {label} {open ? "▲" : "▼"}
       </button>
+
       {open && (
-        <div style={{ position: "absolute", top: "110%", left: 0, background: "#fff", border: "2px solid #E8EDE8", borderRadius: 14, padding: "8px", zIndex: 50, minWidth: 150, boxShadow: "0 8px 32px rgba(14,32,17,0.12)" }}>
+        <div
+          style={{
+            position: "absolute", top: "110%", left: 0,
+            background: "#fff", border: "2px solid #E8EDE8",
+            borderRadius: 14, padding: "8px", zIndex: 50,
+            minWidth: 170, boxShadow: "0 8px 32px rgba(14,32,17,0.12)",
+          }}
+        >
           {[
-            { fmt: "CSV",         fn: () => { downloadCSV([headers, ...rows], csvFile); setOpen(false); } },
-            { fmt: "Excel",       fn: () => { downloadExcel(headers, rows, xlsFile);    setOpen(false); } },
-            { fmt: "Print / PDF", fn: () => { window.print(); setOpen(false); } },
+            {
+              fmt: "📄 CSV (.csv)",
+              fn: () => {
+                downloadCSV([headers, ...rows], csvFile);
+                setOpen(false);
+              },
+            },
+            {
+              fmt: "📊 Excel (.xlsx)",
+              fn: () => {
+                downloadXLSX(headers, rows, xlsxFile);
+                setOpen(false);
+              },
+            },
+            {
+              fmt: "🖨️ Print / PDF",
+              fn: () => { window.print(); setOpen(false); },
+            },
           ].map(({ fmt, fn }) => (
-            <button key={fmt} onClick={fn}
-              style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "9px 14px", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 13, cursor: "pointer", borderRadius: 8, color: "#0E2011" }}
+            <button
+              key={fmt}
+              onClick={fn}
+              style={{
+                display: "block", width: "100%", textAlign: "left",
+                background: "none", border: "none",
+                padding: "9px 14px", fontFamily: "var(--font-body)",
+                fontWeight: 700, fontSize: 13, cursor: "pointer",
+                borderRadius: 8, color: "#0E2011", transition: "background 0.15s",
+              }}
               onMouseEnter={(e) => (e.target.style.background = "#E8FFD0")}
-              onMouseLeave={(e) => (e.target.style.background = "none")}>
-              {fmt === "CSV" ? "📄" : fmt === "Excel" ? "📊" : "🖨️"} {fmt}
+              onMouseLeave={(e) => (e.target.style.background = "none")}
+            >
+              {fmt}
             </button>
           ))}
         </div>
@@ -52,8 +155,6 @@ function ExportMenu({ label, headers, rows, csvFile, xlsFile }) {
 }
 
 /* ── Date helpers ────────────────────────────────────────────────────────── */
-// Returns { year, month, day } as numbers from a transaction object.
-// Uses created_at (ISO string from DB) if available, falls back to parsing date string.
 function txDate(tx) {
   const d = tx.created_at ? new Date(tx.created_at) : new Date(tx.date);
   return { year: d.getFullYear(), month: d.getMonth(), day: d.getDate(), raw: d };
@@ -71,7 +172,6 @@ function isThisMonth(tx) {
   return year === now.getFullYear() && month === now.getMonth();
 }
 
-// Groups transactions into { "Jan 2026": [tx, …], … } sorted newest first
 function groupByMonth(txs) {
   const map = {};
   txs.forEach((tx) => {
@@ -80,13 +180,10 @@ function groupByMonth(txs) {
     if (!map[key]) map[key] = [];
     map[key].push(tx);
   });
-  // Sort keys descending by date
-  return Object.entries(map).sort(([a], [b]) => {
-    return new Date("1 " + b) - new Date("1 " + a);
-  });
+  return Object.entries(map).sort(([a], [b]) => new Date("1 " + b) - new Date("1 " + a));
 }
 
-/* ── Status badge helper ─────────────────────────────────────────────────── */
+/* ── Status badge ────────────────────────────────────────────────────────── */
 function StatusBadge({ status }) {
   const m = {
     Delivered: ["#DCFCE7", "#166534"],
@@ -101,18 +198,18 @@ function StatusBadge({ status }) {
   );
 }
 
+/* ── Main component ──────────────────────────────────────────────────────── */
 export default function ReportsClient() {
   const { transactions, inventory } = useApp();
 
-  // ── Derived stats ──────────────────────────────────────────────────────
   const valid = (t) => t.status !== "Cancelled";
 
-  const todaySales     = transactions.filter((t) => isToday(t) && valid(t)).reduce((s, t) => s + t.total, 0);
-  const monthSales     = transactions.filter((t) => isThisMonth(t) && valid(t)).reduce((s, t) => s + t.total, 0);
-  const monthOrders    = transactions.filter((t) => isThisMonth(t) && valid(t)).length;
-  const totalSales     = transactions.filter(valid).reduce((s, t) => s + t.total, 0);
+  const todaySales  = transactions.filter((t) => isToday(t)     && valid(t)).reduce((s, t) => s + t.total, 0);
+  const monthSales  = transactions.filter((t) => isThisMonth(t) && valid(t)).reduce((s, t) => s + t.total, 0);
+  const monthOrders = transactions.filter((t) => isThisMonth(t) && valid(t)).length;
+  const totalSales  = transactions.filter(valid).reduce((s, t) => s + t.total, 0);
 
-  // Per-product sold quantities and revenue (from order items)
+  // Per-product sold quantities and revenue
   const ps = {};
   transactions.forEach((tx) => {
     if (!valid(tx)) return;
@@ -123,7 +220,6 @@ export default function ReportsClient() {
     });
   });
 
-  // Monthly breakdown — array of [monthLabel, { total, count }]
   const monthlyGroups = groupByMonth(transactions.filter(valid));
   const monthlyRows   = monthlyGroups.map(([label, txs]) => ({
     label,
@@ -131,22 +227,27 @@ export default function ReportsClient() {
     count: txs.length,
   }));
 
-  // ── Export data ───────────────────────────────────────────────────────
-  const orderHeaders = ["Order ID", "Date", "Payment", "Delivery", "Status", "Total (PHP)"];
-  const orderRows    = transactions.map((t) => [t.id, t.date, t.method, t.delivery, t.status, t.total]);
+  const products = Array.isArray(inventory) ? inventory : [];
 
-  // Use live inventory from DB (not static products file)
-  const products     = Array.isArray(inventory) ? inventory : [];
-  const invHeaders   = ["Product", "Category", "Price", "Stock", "Units Sold", "Revenue", "Status"];
-  const invRows      = products.map((p) => [
+  // ── Export data ─────────────────────────────────────────────────────────
+  const orderHeaders  = ["Order ID", "Date", "Buyer Email", "Payment", "Delivery", "Status", "Total (PHP)"];
+  const orderRows     = transactions.map((t) => [
+    t.id, t.date, t.user_email || "", t.method, t.delivery, t.status, t.total,
+  ]);
+
+  const invHeaders = ["Product", "Category", "Price (PHP)", "Stock", "Units Sold", "Revenue (PHP)", "Status"];
+  const invRows    = products.map((p) => [
     p.name, p.category, p.price, p.stock,
     ps[p.name]?.qty || 0,
     ps[p.name]?.rev || 0,
     p.stock === 0 ? "Out of Stock" : p.stock < 10 ? "Low Stock" : "In Stock",
   ]);
 
-  const monthHeaders = ["Month", "Orders", "Revenue (PHP)"];
-  const monthExport  = monthlyRows.map((r) => [r.label, r.count, r.total]);
+  const monthHeaders = ["Month", "Orders", "Revenue (PHP)", "Avg Order Value (PHP)"];
+  const monthExport  = monthlyRows.map((r) => [
+    r.label, r.count, r.total,
+    r.count > 0 ? Math.round(r.total / r.count) : 0,
+  ]);
 
   const now      = new Date();
   const nowLabel = now.toLocaleDateString("en-PH", { month: "long", year: "numeric" });
@@ -158,7 +259,7 @@ export default function ReportsClient() {
       <main className="seller-page-main" style={{ flex: 1, background: "#F8F9FA", overflowY: "auto" }}>
         <style>{`
           .seller-page-main { padding: 32px; }
-          @media (max-width: 1023px) { .seller-page-main { padding: 80px 16px 100px !important; } }
+          /* mobile padding handled by globals.css */
           .reports-summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 14px; margin-bottom: 24px; }
           @media (max-width: 479px) { .reports-summary { grid-template-columns: 1fr 1fr; gap: 10px; } }
           .reports-monthly { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 10px; }
@@ -173,11 +274,33 @@ export default function ReportsClient() {
             <p style={{ color: "#888", fontSize: 14, margin: 0 }}>Daily, monthly, and all-time sales overview.</p>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} className="no-print">
-            <ExportMenu label="Orders"    headers={orderHeaders}  rows={orderRows}   csvFile="orders.csv"    xlsFile="orders.xls" />
-            <ExportMenu label="Monthly"   headers={monthHeaders}  rows={monthExport} csvFile="monthly.csv"   xlsFile="monthly.xls" />
-            <ExportMenu label="Inventory" headers={invHeaders}    rows={invRows}     csvFile="inventory.csv" xlsFile="inventory.xls" />
-            <button onClick={() => window.print()} className="no-print"
-              style={{ background: "#0E2011", color: "#A8FF3E", border: "none", borderRadius: 12, padding: "10px 18px", fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+            <ExportMenu
+              label="Orders"
+              headers={orderHeaders} rows={orderRows}
+              csvFile="coircraft-orders.csv"   xlsxFile="coircraft-orders.xlsx"
+            />
+            <ExportMenu
+              label="Monthly"
+              headers={monthHeaders} rows={monthExport}
+              csvFile="coircraft-monthly.csv"  xlsxFile="coircraft-monthly.xlsx"
+            />
+            <ExportMenu
+              label="Inventory"
+              headers={invHeaders} rows={invRows}
+              csvFile="coircraft-inventory.csv" xlsxFile="coircraft-inventory.xlsx"
+            />
+            <button
+              onClick={() => window.print()}
+              className="no-print"
+              style={{
+                background: "#0E2011", color: "#A8FF3E", border: "none",
+                borderRadius: 12, padding: "10px 18px",
+                fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 12,
+                cursor: "pointer", transition: "all 0.18s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#1A472A"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "#0E2011"; }}
+            >
               🖨️ Print / PDF
             </button>
           </div>
@@ -186,10 +309,10 @@ export default function ReportsClient() {
         {/* ── Summary cards ── */}
         <div className="reports-summary">
           {[
-            { label: "Today's Sales",   value: todaySales,  icon: "📅", sub: new Date().toLocaleDateString("en-PH", { weekday: "long", month: "short", day: "numeric" }) },
-            { label: `${nowLabel}`,     value: monthSales,  icon: "📆", sub: `${monthOrders} order${monthOrders !== 1 ? "s" : ""} this month` },
-            { label: "All-Time Revenue",value: totalSales,  icon: "💰", sub: `${transactions.filter(valid).length} confirmed orders` },
-            { label: "Total Orders",    value: transactions.length, icon: "📦", sub: "Including all statuses", raw: true },
+            { label: "Today's Sales",    value: todaySales,  icon: "📅", sub: new Date().toLocaleDateString("en-PH", { weekday: "long", month: "short", day: "numeric" }) },
+            { label: nowLabel,           value: monthSales,  icon: "📆", sub: `${monthOrders} order${monthOrders !== 1 ? "s" : ""} this month` },
+            { label: "All-Time Revenue", value: totalSales,  icon: "💰", sub: `${transactions.filter(valid).length} confirmed orders` },
+            { label: "Total Orders",     value: transactions.length, icon: "📦", sub: "All statuses", raw: true },
           ].map(({ label, value, icon, sub, raw }) => (
             <div key={label} style={{ background: "#fff", borderRadius: 18, padding: "20px", boxShadow: "0 2px 12px rgba(14,32,17,0.06)" }}>
               <div style={{ fontSize: 22, marginBottom: 8 }}>{icon}</div>
@@ -227,18 +350,14 @@ export default function ReportsClient() {
                   </tr>
                 </thead>
                 <tbody>
-                  {monthlyRows.map((row, idx) => {
+                  {monthlyRows.map((row) => {
                     const isCurrent = row.label === nowLabel;
-                    const avg       = row.count > 0 ? Math.round(row.total / row.count) : 0;
+                    const avg = row.count > 0 ? Math.round(row.total / row.count) : 0;
                     return (
                       <tr key={row.label} style={{ borderBottom: "1px solid #F0F0EC", background: isCurrent ? "#F5FFF0" : "transparent" }}>
                         <td style={{ padding: "12px 14px", fontWeight: 700, color: "#0E2011", whiteSpace: "nowrap" }}>
                           {row.label}
-                          {isCurrent && (
-                            <span style={{ marginLeft: 8, background: "#E8FFD0", color: "#1A7A2E", fontSize: 9, fontWeight: 800, padding: "2px 8px", borderRadius: 999 }}>
-                              CURRENT
-                            </span>
-                          )}
+                          {isCurrent && <span style={{ marginLeft: 8, background: "#E8FFD0", color: "#1A7A2E", fontSize: 9, fontWeight: 800, padding: "2px 8px", borderRadius: 999 }}>CURRENT</span>}
                         </td>
                         <td style={{ padding: "12px 14px", color: "#555" }}>{row.count}</td>
                         <td style={{ padding: "12px 14px", fontWeight: 700, color: "#1A7A2E" }}>₱{row.total.toLocaleString()}</td>
@@ -253,7 +372,9 @@ export default function ReportsClient() {
                     <td style={{ padding: "12px 14px", fontWeight: 700 }}>{transactions.filter(valid).length}</td>
                     <td style={{ padding: "12px 14px", fontWeight: 800, color: "#1A7A2E", fontSize: 14 }}>₱{totalSales.toLocaleString()}</td>
                     <td style={{ padding: "12px 14px", color: "#888" }}>
-                      ₱{transactions.filter(valid).length > 0 ? Math.round(totalSales / transactions.filter(valid).length).toLocaleString() : 0}
+                      ₱{transactions.filter(valid).length > 0
+                        ? Math.round(totalSales / transactions.filter(valid).length).toLocaleString()
+                        : 0}
                     </td>
                   </tr>
                 </tfoot>
@@ -275,12 +396,13 @@ export default function ReportsClient() {
             </thead>
             <tbody>
               {transactions.length === 0 && (
-                <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: "#aaa" }}>No orders yet</td></tr>
+                <tr><td colSpan={7} style={{ padding: 32, textAlign: "center", color: "#aaa" }}>No orders yet</td></tr>
               )}
               {transactions.map((tx) => (
                 <tr key={tx.id} style={{ borderBottom: "1px solid #F0F0EC" }}>
                   <td style={{ padding: "11px 14px", fontWeight: 700, color: "#1A7A2E", whiteSpace: "nowrap" }}>{tx.id}</td>
                   <td style={{ padding: "11px 14px", color: "#888", whiteSpace: "nowrap" }}>{tx.date}</td>
+                  <td style={{ padding: "11px 14px", color: "#666", fontSize: 12 }}>{tx.user_email || "—"}</td>
                   <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>{tx.method}</td>
                   <td style={{ padding: "11px 14px", whiteSpace: "nowrap" }}>{tx.delivery}</td>
                   <td style={{ padding: "11px 14px" }}><StatusBadge status={tx.status} /></td>
@@ -291,7 +413,7 @@ export default function ReportsClient() {
           </table>
         </div>
 
-        {/* ── Inventory report (live from DB) ── */}
+        {/* ── Inventory report ── */}
         <div style={{ background: "#fff", borderRadius: 18, padding: "clamp(16px,4vw,22px)", boxShadow: "0 2px 12px rgba(14,32,17,0.06)", overflow: "auto" }}>
           <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: "clamp(15px,2.5vw,18px)", color: "#0E2011", margin: "0 0 16px" }}>Inventory Report</h2>
           <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", minWidth: 600 }}>
