@@ -11,8 +11,30 @@ const TAG_SECTIONS = [
   { tag: "Featured",    emoji: "⭐", label: "Featured"      },
 ];
 
+function SectionSkeleton() {
+  return (
+    <section style={{ padding: "clamp(32px,6vw,56px) 0" }}>
+      <div className="tk-container">
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
+          <div className="tk-skeleton" style={{ width: 52, height: 52, borderRadius: 14 }} />
+          <div>
+            <div className="tk-skeleton" style={{ width: 160, height: 20, borderRadius: 8, marginBottom: 6 }} />
+            <div className="tk-skeleton" style={{ width: 80, height: 13, borderRadius: 6 }} />
+          </div>
+        </div>
+        <div className="tk-grid-products">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="tk-skeleton" style={{ borderRadius: 20, aspectRatio: "3/4" }} />
+          ))}
+        </div>
+      </div>
+      <style>{`@keyframes skeletonShimmer{from{background-position:-400px 0}to{background-position:400px 0}}.tk-skeleton{background:linear-gradient(90deg,#E8F0E0 25%,#F2FAF0 50%,#E8F0E0 75%);background-size:800px 100%;animation:skeletonShimmer 1.6s linear infinite;border-radius:12px}`}</style>
+    </section>
+  );
+}
+
 export default function StorePage() {
-  const { inventory, storefront } = useApp();
+  const { inventory, inventoryLoaded, storefront } = useApp();
   const products = Array.isArray(inventory) ? inventory : [];
 
   return (
@@ -51,19 +73,16 @@ export default function StorePage() {
 
         <div className="tk-wave" />
 
-        {/* Loading skeleton */}
-        {products.length === 0 && (
-          <div className="tk-container" style={{ paddingTop: 40, paddingBottom: 40 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16 }}>
-              {[1,2,3,4].map((n) => (
-                <div key={n} className="tk-skeleton" style={{ borderRadius: 20, aspectRatio: "3/4" }} />
-              ))}
-            </div>
-          </div>
+        {/* ── LOADING STATE ── */}
+        {!inventoryLoaded && (
+          <>
+            <SectionSkeleton />
+            <SectionSkeleton />
+          </>
         )}
 
         {/* ── TAG SECTIONS ── */}
-        {TAG_SECTIONS.map(({ tag, emoji, label }) => {
+        {inventoryLoaded && TAG_SECTIONS.map(({ tag, emoji, label }) => {
           const tagProducts = products.filter((p) => p.tag === tag);
           if (!tagProducts.length) return null;
           return (
@@ -93,6 +112,15 @@ export default function StorePage() {
             </section>
           );
         })}
+
+        {/* Empty state after loading */}
+        {inventoryLoaded && products.length === 0 && (
+          <div style={{ textAlign: "center", padding: "80px 24px" }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>🌿</div>
+            <h2 style={{ fontFamily: "var(--font-display)", color: "#0E2011", margin: "0 0 10px" }}>No products yet</h2>
+            <p style={{ color: "#888" }}>The seller hasn't added any products. Check back soon!</p>
+          </div>
+        )}
 
       </main>
       <Footer />

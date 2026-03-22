@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useApp } from "@/context/AppContext";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import ProductCard from "@/components/ProductCard"; // ← top-level import (was require() inside render)
 import Link from "next/link";
 import { createPortal } from "react-dom";
 
@@ -33,7 +34,13 @@ function MobileBar({ product, qty, setQty, onAdd, added, wishlisted, onWishlist 
   if (!mounted || !product || product.stock === 0) return null;
 
   return createPortal(
-    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderTop: "1px solid #E5EDE5", padding: "12px 16px 20px", zIndex: 80, display: "flex", alignItems: "center", gap: 10, boxShadow: "0 -4px 20px rgba(14,32,17,0.10)" }}>
+    <div style={{
+      position: "fixed", bottom: 0, left: 0, right: 0,
+      background: "#fff", borderTop: "1px solid #E5EDE5",
+      padding: "12px 16px 20px", zIndex: 80,
+      display: "flex", alignItems: "center", gap: 10,
+      boxShadow: "0 -4px 20px rgba(14,32,17,0.10)",
+    }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F5F9F0", borderRadius: 999, padding: "6px 12px", border: "2px solid #E5EDE5", flexShrink: 0 }}>
         <button onClick={() => setQty(Math.max(1, qty - 1))} style={{ width: 28, height: 28, background: "#0E2011", borderRadius: "50%", border: "none", color: "#A8FF3E", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
         <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 16, minWidth: 20, textAlign: "center" }}>{qty}</span>
@@ -53,15 +60,48 @@ function MobileBar({ product, qty, setQty, onAdd, added, wishlisted, onWishlist 
 const TAG_BG  = { "Best Seller": "#FF6B35", "Trending": "#E74C3C", "New": "#1A7A2E", "Featured": "#0E2011" };
 const IMG_BG  = ["linear-gradient(135deg,#E8FFD0,#C5F0A0)", "linear-gradient(135deg,#FFF3D9,#FFE5A0)", "linear-gradient(135deg,#E3F2FD,#BBDEFB)", "linear-gradient(135deg,#F3E5F5,#E1BEE7)"];
 
+/* ── Skeleton loader for product detail ── */
+function ProductSkeleton() {
+  return (
+    <>
+      <Navbar />
+      <main style={{ background: "var(--tk-bg)", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px 48px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 24 }} className="pd-grid">
+            <div className="tk-skeleton" style={{ borderRadius: 22, aspectRatio: "1" }} />
+            <div>
+              <div className="tk-skeleton" style={{ height: 16, width: "40%", borderRadius: 8, marginBottom: 12 }} />
+              <div className="tk-skeleton" style={{ height: 36, width: "80%", borderRadius: 8, marginBottom: 12 }} />
+              <div className="tk-skeleton" style={{ height: 20, width: "60%", borderRadius: 8, marginBottom: 20 }} />
+              <div className="tk-skeleton" style={{ height: 14, borderRadius: 6, marginBottom: 8 }} />
+              <div className="tk-skeleton" style={{ height: 14, width: "85%", borderRadius: 6, marginBottom: 8 }} />
+              <div className="tk-skeleton" style={{ height: 14, width: "70%", borderRadius: 6, marginBottom: 24 }} />
+              <div className="tk-skeleton" style={{ height: 46, width: "50%", borderRadius: 999 }} />
+            </div>
+          </div>
+          <style>{`
+            @media (min-width: 768px) { .pd-grid { grid-template-columns: 1fr 1fr !important; gap: 48px !important; } }
+            @keyframes skeletonShimmer { from{background-position:-400px 0} to{background-position:400px 0} }
+            .tk-skeleton { background: linear-gradient(90deg,#E8F0E0 25%,#F2FAF0 50%,#E8F0E0 75%); background-size: 800px 100%; animation: skeletonShimmer 1.6s linear infinite; }
+          `}</style>
+        </div>
+      </main>
+      <Footer />
+    </>
+  );
+}
+
 export default function ProductDetailPage() {
   const { id }    = useParams();
   const router    = useRouter();
 
-  // ── Read inventory from context so seller edits reflect immediately ───────
   const {
-    inventory, user, addToCart,
+    inventory, inventoryLoaded,
+    user, addToCart,
     isWishlisted, toggleWishlist,
-    getProductReviews, addReview, canReview,
+    getProductReviews,      // async — used in useEffect to trigger fetch
+    getProductReviewsSync,  // sync  — used for rendering
+    addReview, canReview,
   } = useApp();
 
   const products = Array.isArray(inventory) ? inventory : [];
@@ -73,19 +113,32 @@ export default function ProductDetailPage() {
   const [submitted, setSubmitted] = useState(false);
   const [added,     setAdded]     = useState(false);
 
+  // ── Fetch reviews once product is known ──────────────────────────────────
+  useEffect(() => {
+    if (product?.id) {
+      getProductReviews(product.id); // async — updates context state when done
+    }
+  }, [product?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Show skeleton while inventory is still loading ────────────────────────
+  if (!inventoryLoaded) return <ProductSkeleton />;
+
+  // ── Product not found (after inventory has loaded) ─────────────────────
   if (!product) return (
     <>
       <Navbar />
       <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16, padding: 24 }}>
         <div style={{ fontSize: 56 }}>🔍</div>
         <h2 style={{ fontFamily: "var(--font-display)", color: "#0E2011", textAlign: "center" }}>Product not found</h2>
+        <p style={{ color: "#888", textAlign: "center" }}>This product may have been removed or the link is incorrect.</p>
         <Link href="/products" className="tk-btn-cta" style={{ textDecoration: "none" }}>Back to Products</Link>
       </div>
       <Footer />
     </>
   );
 
-  const reviews       = getProductReviews(product.id);
+  // ── Use SYNC version for rendering — no Promise returned ─────────────────
+  const reviews       = getProductReviewsSync(product.id);
   const avgRating     = reviews.length
     ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
     : null;
@@ -104,13 +157,15 @@ export default function ProductDetailPage() {
     toggleWishlist(product.id);
   };
 
-  const handleSubmitReview = (e) => {
+  const handleSubmitReview = async (e) => {
     e.preventDefault();
     if (!rating) return;
-    addReview({ productId: product.id, rating, comment, author: user.name, date: new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) });
+    await addReview({ productId: product.id, rating, comment, author: user.name, date: new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) });
     setSubmitted(true);
     setRating(0);
     setComment("");
+    // Refresh reviews after submission
+    getProductReviews(product.id);
   };
 
   const liked = isWishlisted(product.id);
@@ -294,10 +349,10 @@ export default function ProductDetailPage() {
             <div style={{ marginBottom: 40 }}>
               <h2 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(18px,3vw,24px)", fontWeight: 800, color: "#0E2011", margin: "0 0 20px" }}>Related Products</h2>
               <div className="pd-related-grid">
-                {related.map((p, i) => {
-                  const PC = require("@/components/ProductCard").default;
-                  return <PC key={p.id} product={p} index={i} />;
-                })}
+                {/* ← No more require() — using top-level import */}
+                {related.map((p, i) => (
+                  <ProductCard key={p.id} product={p} index={i} />
+                ))}
               </div>
             </div>
           )}
@@ -310,7 +365,6 @@ export default function ProductDetailPage() {
         product={product} qty={qty} setQty={setQty}
         onAdd={handleAddToCart} added={added}
         wishlisted={liked} onWishlist={handleWishlist}
-        user={user}
       />
 
       <Footer />

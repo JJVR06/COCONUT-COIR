@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import { useApp } from "@/context/AppContext";
-import { useProducts } from "@/lib/useProducts";  
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ProductCard from "@/components/ProductCard";
@@ -9,9 +8,25 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Search } from "lucide-react";
 
+/* ── Skeleton grid shown while inventory loads ── */
+function ProductGridSkeleton() {
+  return (
+    <>
+      <style>{`
+        @keyframes skeletonShimmer { from{background-position:-400px 0} to{background-position:400px 0} }
+        .tk-skeleton-item { background: linear-gradient(90deg,#E8F0E0 25%,#F2FAF0 50%,#E8F0E0 75%); background-size: 800px 100%; animation: skeletonShimmer 1.6s linear infinite; border-radius: 20px; }
+      `}</style>
+      <div className="tk-grid-products">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="tk-skeleton-item" style={{ aspectRatio: "3/4" }} />
+        ))}
+      </div>
+    </>
+  );
+}
+
 function ProductsContent() {
-  const { storefront } = useApp();
-  const { products } = useProducts();
+  const { storefront, inventory, inventoryLoaded } = useApp();
 
   const searchParams  = useSearchParams();
   const initCategory  = searchParams.get("cat") || searchParams.get("category") || "All";
@@ -20,6 +35,7 @@ function ProductsContent() {
   const [sort,     setSort]     = useState("default");
 
   const categories = ["All", "Garden", "Home", "Construction", "Crafts"];
+  const products   = Array.isArray(inventory) ? inventory : [];
 
   let filtered = products.filter((p) => {
     const matchCat    = category === "All" || p.category === category;
@@ -84,7 +100,7 @@ function ProductsContent() {
           </div>
 
           {/* Category pills */}
-          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 20 }}>
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, marginBottom: 20, scrollbarWidth: "none" }}>
             {categories.map((c) => (
               <button key={c} onClick={() => setCategory(c)} className={`tk-filter ${category === c ? "active" : ""}`} style={{ flexShrink: 0 }}>
                 {c}
@@ -92,13 +108,21 @@ function ProductsContent() {
             ))}
           </div>
 
-          <p style={{ fontSize: 13, color: "#888", fontWeight: 600, marginBottom: 20 }}>
-            {filtered.length} product{filtered.length !== 1 ? "s" : ""}
-            {category !== "All" && <span style={{ color: "#1A7A2E" }}> in {category}</span>}
-            {search && <span style={{ color: "#1A7A2E" }}> for &ldquo;{search}&rdquo;</span>}
-          </p>
+          {/* Result count — show skeleton placeholder when loading */}
+          {inventoryLoaded ? (
+            <p style={{ fontSize: 13, color: "#888", fontWeight: 600, marginBottom: 20 }}>
+              {filtered.length} product{filtered.length !== 1 ? "s" : ""}
+              {category !== "All" && <span style={{ color: "#1A7A2E" }}> in {category}</span>}
+              {search && <span style={{ color: "#1A7A2E" }}> for &ldquo;{search}&rdquo;</span>}
+            </p>
+          ) : (
+            <p style={{ fontSize: 13, color: "#ccc", fontWeight: 600, marginBottom: 20 }}>Loading products…</p>
+          )}
 
-          {filtered.length === 0 ? (
+          {/* Grid or skeleton */}
+          {!inventoryLoaded ? (
+            <ProductGridSkeleton />
+          ) : filtered.length === 0 ? (
             <div style={{ textAlign: "center", padding: "64px 0" }}>
               <div style={{ fontSize: 52, marginBottom: 14 }}>🔍</div>
               <p style={{ fontSize: 17, fontWeight: 700, color: "#aaa", marginBottom: 6 }}>No products found</p>
