@@ -33,6 +33,7 @@
   Both stay at their browser defaults so the viewport is the natural
   scroll root and the scroll wheel always works.
   Horizontal bleed is clipped by #app-root (see layout.js).
+
 */
 html {
   font-size: 16px;
@@ -41,6 +42,9 @@ html {
 /* ── SCROLLBAR ──────────────────────────────────────── */
 html { scrollbar-width: none; }         /* Firefox */
 ::-webkit-scrollbar { display: none; } /* Chrome / Safari / Edge */
+/* Prevent body scroll lock on hydration */
+body { overflow-y: auto; }
+body.menu-open { overflow: hidden; }
 body {
   background: var(--tk-bg);
   color: var(--tk-dark);

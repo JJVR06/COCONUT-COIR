@@ -15,20 +15,21 @@ export default function Navbar() {
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
 
 
-  useEffect(() => {
-    document.body.style.overflow = "";
-  }, []);
+  // Reset any stuck scroll lock on mount
+useEffect(() => {
+  document.body.classList.remove("menu-open");
+}, []);
 
-  useEffect(() => { setMenuOpen(false); }, [pathname]);
+useEffect(() => { setMenuOpen(false); }, [pathname]);
 
-  useEffect(() => {
-    if (menuOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => { document.body.style.overflow = ""; };
-  }, [menuOpen]);
+useEffect(() => {
+  if (menuOpen) {
+    document.body.classList.add("menu-open");
+  } else {
+    document.body.classList.remove("menu-open");
+  }
+  return () => { document.body.classList.remove("menu-open"); };
+}, [menuOpen]);;
 
   const logout = () => { setUser(null); router.push("/"); };
 
