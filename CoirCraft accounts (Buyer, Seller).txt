@@ -1,0 +1,4 @@
+Buyer Account: testbuyer@gmail.com
+Password: test123
+Seller Account: admin@gmail.com
+Password: seller123
