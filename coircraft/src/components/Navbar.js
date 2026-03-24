@@ -14,15 +14,19 @@ export default function Navbar() {
 
   const cartCount = cart.reduce((s, i) => s + i.qty, 0);
 
+
   useEffect(() => {
-    const fn = () => setScrolled(window.scrollY > 10);
-    window.addEventListener("scroll", fn, { passive: true });
-    return () => window.removeEventListener("scroll", fn);
+    document.body.style.overflow = "";
   }, []);
 
   useEffect(() => { setMenuOpen(false); }, [pathname]);
+
   useEffect(() => {
-    document.body.style.overflow = menuOpen ? "hidden" : "";
+    if (menuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
     return () => { document.body.style.overflow = ""; };
   }, [menuOpen]);
 

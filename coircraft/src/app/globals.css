@@ -38,6 +38,9 @@ html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
 }
+/* ── SCROLLBAR ──────────────────────────────────────── */
+html { scrollbar-width: none; }         /* Firefox */
+::-webkit-scrollbar { display: none; } /* Chrome / Safari / Edge */
 body {
   background: var(--tk-bg);
   color: var(--tk-dark);

@@ -129,11 +129,6 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* Seller hint */}
-      <div style={{ marginTop: 14, zIndex: 1, background: "rgba(255,255,255,0.8)", backdropFilter: "blur(6px)", border: "1px solid #E8FFD0", borderRadius: 12, padding: "10px 20px", fontSize: 12, color: "#888", textAlign: "center", maxWidth: 420, width: "100%" }}>
-        🏪 <strong style={{ color: "#1A7A2E" }}>Seller:</strong> admin@coircraft.ph
-      </div>
-
       <Link href="/" style={{ marginTop: 16, fontSize: 13, color: "#bbb", textDecoration: "none", zIndex: 1 }}>← Back to Home</Link>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
