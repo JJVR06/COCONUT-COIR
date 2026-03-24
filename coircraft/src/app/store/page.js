@@ -42,17 +42,6 @@ export default function StorePage() {
       <Navbar />
       <main style={{ background: "var(--tk-bg)", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
 
-        {/* Announcement banner */}
-        {storefront?.announcement && (
-          <div style={{
-            background: "linear-gradient(90deg,#0E2011,#1A472A)",
-            color: "#A8FF3E", textAlign: "center",
-            padding: "10px 16px", fontSize: 13, fontWeight: 700,
-          }}>
-            📢 {storefront.announcement}
-          </div>
-        )}
-
         {/* ── HERO ── */}
         <section style={{ background: "linear-gradient(135deg,#1A472A 0%,#0E2011 55%,#1A5C2E 100%)", padding: "clamp(48px,10vw,90px) 16px clamp(70px,12vw,120px)", position: "relative", overflow: "hidden", textAlign: "center" }}>
           <div style={{ position: "absolute", top: "-20%", right: "-10%", width: "clamp(200px,40vw,400px)", height: "clamp(200px,40vw,400px)", background: "radial-gradient(circle,rgba(168,255,62,0.12) 0%,transparent 70%)", borderRadius: "50%", pointerEvents: "none" }} />

@@ -53,11 +53,6 @@ function ProductsContent() {
       <Navbar />
       <main style={{ background: "var(--tk-bg)", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
 
-        {storefront?.announcement && (
-          <div style={{ background: "linear-gradient(90deg,#0E2011,#1A472A)", color: "#A8FF3E", textAlign: "center", padding: "10px 16px", fontSize: 13, fontWeight: 700 }}>
-            📢 {storefront.announcement}
-          </div>
-        )}
 
         {/* Hero */}
         <section style={{ background: "linear-gradient(135deg,#1A472A,#0E2011)", padding: "clamp(44px,8vw,80px) 16px clamp(60px,10vw,100px)", position: "relative", overflow: "hidden", textAlign: "center" }}>

@@ -91,13 +91,6 @@ export default function Home() {
       <Navbar />
       <main style={{ background: "var(--tk-bg)", fontFamily: "var(--font-body)", overflowX: "hidden" }}>
 
-        {/* ── Announcement banner ── */}
-        {sf.announcement && (
-          <div style={{ background: "linear-gradient(90deg,#0E2011,#1A472A)", color: "#A8FF3E", textAlign: "center", padding: "10px 16px", fontSize: 13, fontWeight: 700, animation: "fadeDown 0.4s ease both" }}>
-            📢 {sf.announcement}
-          </div>
-        )}
-
         {/* ── HERO ── */}
         <section
           className="tk-hero"
