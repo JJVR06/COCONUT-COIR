@@ -6,7 +6,7 @@ export async function POST(req) {
     const { email, password } = await req.json();
 
     const result = await sql`
-      SELECT id, name, email, address, mobile, avatar
+      SELECT id, name, email, address, mobile, avatar, role
       FROM users
       WHERE email = ${email} AND password = ${password}
     `;

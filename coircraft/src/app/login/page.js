@@ -4,9 +4,6 @@ import { useApp } from "@/context/AppContext";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
 
-const SELLER_EMAIL = "admin@coircraft.ph";
-const SELLER_PASS  = "seller123";
-
 export default function LoginPage() {
   const { setUser, setSellerLoggedIn } = useApp();
 
@@ -22,39 +19,37 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const emailClean = email.trim().toLowerCase();
-
-    // ── Seller check (hardcoded, no DB needed) ──
-    if (emailClean === SELLER_EMAIL && password === SELLER_PASS) {
-      setSellerLoggedIn(true);
-      window.location.href = "/seller/dashboard";
-      return;
-    }
-
-    // ── Buyer check via database API ──
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailClean, password }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
 
       const data = await res.json();
 
       if (res.ok && data.user) {
-        setUser({
-          name:    data.user.name,
-          email:   data.user.email,
-          address: data.user.address || "",
-          mobile:  data.user.mobile  || "",
-          avatar:  data.user.avatar  || "",
-        });
-        window.location.href = "/store";
-        return;
+        if (data.user.role === "seller") {
+          // ── Seller login via DB ──
+          setSellerLoggedIn(true);
+          window.location.href = "/seller/dashboard";
+          return;
+        } else {
+          // ── Buyer login ──
+          setUser({
+            name:    data.user.name,
+            email:   data.user.email,
+            address: data.user.address || "",
+            mobile:  data.user.mobile  || "",
+            avatar:  data.user.avatar  || "",
+          });
+          window.location.href = "/store";
+          return;
+        }
       }
 
       setError(data.error || "Incorrect email or password. Please try again.");
-    } catch (err) {
+    } catch {
       setError("Something went wrong. Please try again.");
     }
 
@@ -134,7 +129,10 @@ export default function LoginPage() {
         </p>
       </div>
 
-    
+      {/* Seller hint */}
+      <div style={{ marginTop: 14, zIndex: 1, background: "rgba(255,255,255,0.8)", backdropFilter: "blur(6px)", border: "1px solid #E8FFD0", borderRadius: 12, padding: "10px 20px", fontSize: 12, color: "#888", textAlign: "center", maxWidth: 420, width: "100%" }}>
+        🏪 <strong style={{ color: "#1A7A2E" }}>Seller:</strong> admin@coircraft.ph
+      </div>
 
       <Link href="/" style={{ marginTop: 16, fontSize: 13, color: "#bbb", textDecoration: "none", zIndex: 1 }}>← Back to Home</Link>
 
