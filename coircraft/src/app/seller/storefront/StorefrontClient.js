@@ -1,36 +1,30 @@
 "use client";
 import { useState, useEffect } from "react";
 import SellerSidebar from "@/components/SellerSidebar";
-import { useApp } from "@/context/AppContext";
-import { Save, Eye, RefreshCw, Megaphone, Image as ImageIcon, Info, ToggleLeft, ToggleRight } from "lucide-react";
+import { useApp, DEFAULT_STOREFRONT } from "@/context/AppContext";
+import {
+  Save,
+  RefreshCw,
+  Megaphone,
+  Info,
+  ToggleLeft,
+  ToggleRight,
+  AlertTriangle,
+} from "lucide-react";
 
-
-
-const defaultStorefront = {
-  heroTitle:        "Premium Philippine\nCoconut Coir Products",
-  heroSubtitle:     "Eco-friendly, sustainably sourced from the Philippines.",
-  announcement:     "",
-  tagline:          "Premium eco-friendly coconut coir products made with love by Filipino artisans.",
-  name:             "CoirCraft Philippines",
-  address:          "123 Coir Avenue, Quezon City, Metro Manila",
-  hours:            "Mon–Sat: 8:00 AM – 6:00 PM",
-  contactEmail:     "InnoBytes@coircraft.ph",
-  contactPhone:     "+63 912 345 6789",
-  showFeatured:     true,
-  showNewArrivals:  true,
-  showTestimonials: true,
-};
+// ── FIX: Import DEFAULT_STOREFRONT from AppContext instead of duplicating it.
+// The local `defaultStorefront` constant has been removed entirely.
 
 const SECTIONS = [
-  { key: "heroTitle",     label: "Hero Title",        type: "textarea", help: "Main heading on home page (use \\n for line break)" },
-  { key: "heroSubtitle",  label: "Hero Subtitle",     type: "textarea", help: "Subtext below hero title" },
-  { key: "announcement",  label: "Announcement Banner", type: "text",  help: "Shown as a top banner on buyer pages (leave blank to hide)" },
-  { key: "tagline",       label: "Store Tagline",     type: "text",   help: "Short description shown on footer and meta" },
-  { key: "name",          label: "Store Name",        type: "text",   help: "Displayed in navbar and footer" },
-  { key: "address",       label: "Store Address",     type: "text",   help: "Physical address shown on storefront" },
-  { key: "hours",         label: "Business Hours",    type: "text",   help: 'e.g. "Mon–Sat: 8:00 AM – 6:00 PM"' },
-  { key: "contactEmail",  label: "Contact Email",     type: "email",  help: "Shown in footer contact section" },
-  { key: "contactPhone",  label: "Contact Phone",     type: "tel",    help: "Shown in footer contact section" },
+  { key: "heroTitle",    label: "Hero Title",          type: "textarea", help: "Main heading on home page (use \\n for line break)" },
+  { key: "heroSubtitle", label: "Hero Subtitle",       type: "textarea", help: "Subtext below hero title" },
+  { key: "announcement", label: "Announcement Banner", type: "text",     help: "Shown as a top banner on buyer pages (leave blank to hide)" },
+  { key: "tagline",      label: "Store Tagline",       type: "text",     help: "Short description shown on footer and meta" },
+  { key: "name",         label: "Store Name",          type: "text",     help: "Displayed in navbar and footer" },
+  { key: "address",      label: "Store Address",       type: "text",     help: "Physical address shown on storefront" },
+  { key: "hours",        label: "Business Hours",      type: "text",     help: 'e.g. "Mon–Sat: 8:00 AM – 6:00 PM"' },
+  { key: "contactEmail", label: "Contact Email",       type: "email",    help: "Shown in footer contact section" },
+  { key: "contactPhone", label: "Contact Phone",       type: "tel",      help: "Shown in footer contact section" },
 ];
 
 const TOGGLES = [
@@ -42,10 +36,13 @@ const TOGGLES = [
 export default function StorefrontClient() {
   const { storefront, setStorefront, inventory, sellerLoggedIn } = useApp();
 
-  const [form,  setForm]  = useState(storefront);
-  const [saved, setSaved] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [tab,   setTab]   = useState("content"); // content | visibility | preview
+  const [form,      setForm]      = useState(storefront);
+  const [saved,     setSaved]     = useState(false);
+  const [saving,    setSaving]    = useState(false);
+  const [dirty,     setDirty]     = useState(false);
+  // FIX: New state to track DB save failures and surface them in the UI
+  const [saveError, setSaveError] = useState(false);
+  const [tab,       setTab]       = useState("content"); // content | visibility | preview
 
   // Keep form in sync when context loads from localStorage
   useEffect(() => {
@@ -61,19 +58,43 @@ export default function StorefrontClient() {
     setForm((f) => ({ ...f, [key]: value }));
     setDirty(true);
     setSaved(false);
+    setSaveError(false); // clear any previous error when the user edits
   };
 
-  const handleSave = () => {
-    setStorefront(form);   // writes to context + localStorage, cross-tab syncs buyer
-    setSaved(true);
-    setDirty(false);
-    setTimeout(() => setSaved(false), 3000);
+  // FIX: handleSave is now async and awaits setStorefront so it can catch
+  // the error thrown by AppContext when the DB write fails.
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaved(false);
+    setSaveError(false);
+
+    try {
+      await setStorefront(form);
+      setSaved(true);
+      setDirty(false);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      console.error("Storefront save failed:", err);
+      // Changes are already saved to localStorage by setStorefront,
+      // so the buyer will see them — but we flag the DB failure.
+      setSaveError(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Allow the user to retry after a failure without having to re-edit
+  const handleRetry = () => {
+    setSaveError(false);
+    handleSave();
   };
 
   const handleReset = () => {
-    setForm(defaultStorefront);
+    setForm(DEFAULT_STOREFRONT);
     setDirty(true);
     setSaved(false);
+    setSaveError(false);
   };
 
   const inp = {
@@ -86,6 +107,15 @@ export default function StorefrontClient() {
   const blur  = (e) => (e.target.style.borderColor = "#E8EDE8");
 
   const featured = (inventory || []).filter((p) => ["Best Seller", "Featured"].includes(p.tag)).slice(0, 4);
+
+  // ── Determine Save button appearance based on state ─────────────────────
+  const saveBtn = (() => {
+    if (saving)    return { label: "Saving…",         bg: "#D4F5A0",  color: "#555",    cursor: "not-allowed", shadow: "none" };
+    if (saveError) return { label: "⚠ Save Failed — Retry", bg: "#FFCDD2", color: "#C62828", cursor: "pointer",    shadow: "none" };
+    if (saved)     return { label: "✓ Saved!",        bg: "#A8FF3E",  color: "#0E2011", cursor: "default",    shadow: "0 4px 16px rgba(168,255,62,0.35)" };
+    if (dirty)     return { label: "Save Changes",    bg: "linear-gradient(135deg,#A8FF3E,#5BCC1C)", color: "#0E2011", cursor: "pointer", shadow: "0 4px 16px rgba(168,255,62,0.35)" };
+    return               { label: "Save Changes",    bg: "#E8F0E8",  color: "#aaa",    cursor: "not-allowed", shadow: "none" };
+  })();
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
@@ -102,49 +132,76 @@ export default function StorefrontClient() {
           }
         `}</style>
 
-        {/* Header */}
+        {/* ── Header ── */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22, gap: 14, flexWrap: "wrap" }}>
           <div>
             <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(20px,3vw,26px)", fontWeight: 800, color: "#0E2011", margin: "0 0 4px" }}>
               🏪 Storefront Editor
             </h1>
             <p style={{ color: "#888", fontSize: 13, margin: 0 }}>
-              Changes save to all buyer pages <strong style={{ color: "#1A7A2E" }}>in real time</strong>.
+              Changes are saved to the database and reflected on buyer pages after their next page load.
             </p>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button
               onClick={handleReset}
+              disabled={saving}
               style={{
                 display: "flex", alignItems: "center", gap: 6,
                 background: "#fff", border: "2px solid #E8EDE8", borderRadius: 50,
                 padding: "10px 18px", fontFamily: "var(--font-body)",
-                fontWeight: 700, fontSize: 12, color: "#888", cursor: "pointer",
+                fontWeight: 700, fontSize: 12, color: "#888",
+                cursor: saving ? "not-allowed" : "pointer",
               }}
             >
               <RefreshCw size={13} /> Reset Defaults
             </button>
+
+            {/* FIX: Button becomes a "Retry" button on failure */}
             <button
-              onClick={handleSave}
-              disabled={!dirty}
+              onClick={saveError ? handleRetry : handleSave}
+              disabled={saving || (!dirty && !saveError)}
               style={{
                 display: "flex", alignItems: "center", gap: 6,
-                background: dirty ? "linear-gradient(135deg,#A8FF3E,#5BCC1C)" : "#E8F0E8",
-                color: dirty ? "#0E2011" : "#aaa",
-                border: "none", borderRadius: 50, padding: "10px 22px",
+                background: saveBtn.bg,
+                color: saveBtn.color,
+                border: saveError ? "2px solid #FFCDD2" : "none",
+                borderRadius: 50, padding: "10px 22px",
                 fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 13,
-                cursor: dirty ? "pointer" : "not-allowed",
-                boxShadow: dirty ? "0 4px 16px rgba(168,255,62,0.35)" : "none",
+                cursor: saveBtn.cursor,
+                boxShadow: saveBtn.shadow,
                 transition: "all 0.2s",
               }}
             >
-              <Save size={14} />
-              {saved ? "✓ Saved!" : "Save Changes"}
+              {saveError ? <AlertTriangle size={14} /> : <Save size={14} />}
+              {saveBtn.label}
             </button>
           </div>
         </div>
 
-        {/* Flash */}
+        {/* ── FIX: DB save failure banner ── */}
+        {saveError && (
+          <div style={{
+            background: "#FFF5F5",
+            border: "1.5px solid #FFCDD2",
+            borderRadius: 12, padding: "12px 16px", marginBottom: 18,
+            fontSize: 13, color: "#C62828", fontWeight: 600,
+            display: "flex", alignItems: "center", gap: 10,
+          }}>
+            <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+            <span>
+              Could not save to database. Your changes are saved locally — click{" "}
+              <button
+                onClick={handleRetry}
+                style={{ background: "none", border: "none", color: "#C62828", fontWeight: 800, cursor: "pointer", textDecoration: "underline", fontSize: 13, padding: 0, fontFamily: "var(--font-body)" }}
+              >
+                Save to retry
+              </button>.
+            </span>
+          </div>
+        )}
+
+        {/* ── Success flash ── */}
         {saved && (
           <div style={{
             background: "#E8FFD0", border: "1.5px solid #A8FF3E",
@@ -156,7 +213,7 @@ export default function StorefrontClient() {
           </div>
         )}
 
-        {/* Announcement banner preview */}
+        {/* ── Announcement banner preview ── */}
         {form.announcement && (
           <div style={{
             background: "linear-gradient(135deg,#0E2011,#1A472A)",
@@ -168,12 +225,12 @@ export default function StorefrontClient() {
           </div>
         )}
 
-        {/* Tabs */}
+        {/* ── Tabs ── */}
         <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
           {[
-            { key: "content",    label: "📝 Content"     },
-            { key: "visibility", label: "👁️ Visibility"  },
-            { key: "preview",    label: "🖼️ Preview"     },
+            { key: "content",    label: "📝 Content"    },
+            { key: "visibility", label: "👁️ Visibility" },
+            { key: "preview",    label: "🖼️ Preview"    },
           ].map(({ key, label }) => (
             <button
               key={key}
@@ -182,8 +239,8 @@ export default function StorefrontClient() {
                 padding: "10px 20px", borderRadius: 50,
                 border: "2px solid",
                 borderColor: tab === key ? "#0E2011" : "#E8EDE8",
-                background: tab === key ? "#0E2011" : "#fff",
-                color: tab === key ? "#A8FF3E" : "#555",
+                background:  tab === key ? "#0E2011" : "#fff",
+                color:       tab === key ? "#A8FF3E" : "#555",
                 fontFamily: "var(--font-body)", fontWeight: 700,
                 fontSize: 12, cursor: "pointer", transition: "all 0.15s",
               }}
@@ -193,7 +250,9 @@ export default function StorefrontClient() {
           ))}
         </div>
 
-        {/* ── CONTENT TAB ── */}
+        {/* ════════════════════════════════
+            CONTENT TAB
+        ════════════════════════════════ */}
         {tab === "content" && (
           <div
             className="sf-layout"
@@ -238,7 +297,9 @@ export default function StorefrontClient() {
           </div>
         )}
 
-        {/* ── VISIBILITY TAB ── */}
+        {/* ════════════════════════════════
+            VISIBILITY TAB
+        ════════════════════════════════ */}
         {tab === "visibility" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <p style={{ color: "#888", fontSize: 13, margin: "0 0 6px" }}>
@@ -265,11 +326,7 @@ export default function StorefrontClient() {
                   </div>
                   <button
                     onClick={() => handleChange(key, !on)}
-                    style={{
-                      background: "none", border: "none",
-                      cursor: "pointer", padding: 0, flexShrink: 0,
-                      color: on ? "#1A7A2E" : "#ccc",
-                    }}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 0, flexShrink: 0, color: on ? "#1A7A2E" : "#ccc" }}
                   >
                     {on
                       ? <ToggleRight size={44} strokeWidth={1.5} />
@@ -281,7 +338,9 @@ export default function StorefrontClient() {
           </div>
         )}
 
-        {/* ── PREVIEW TAB ── */}
+        {/* ════════════════════════════════
+            PREVIEW TAB
+        ════════════════════════════════ */}
         {tab === "preview" && (
           <div>
             <p style={{ color: "#888", fontSize: 13, marginBottom: 16 }}>
@@ -325,12 +384,13 @@ export default function StorefrontClient() {
                   style={{
                     background: form[key] ? "#E8FFD0" : "#F5F5F5",
                     border: `2px solid ${form[key] ? "#A8FF3E" : "#ddd"}`,
-                    borderRadius: 12, padding: "12px 14px",
-                    textAlign: "center",
+                    borderRadius: 12, padding: "12px 14px", textAlign: "center",
                   }}
                 >
                   <div style={{ fontSize: 18, marginBottom: 4 }}>{form[key] ? "✅" : "🚫"}</div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: form[key] ? "#1A7A2E" : "#888" }}>{label.replace("Show ", "")}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: form[key] ? "#1A7A2E" : "#888" }}>
+                    {label.replace("Show ", "")}
+                  </div>
                 </div>
               ))}
             </div>
@@ -347,7 +407,10 @@ export default function StorefrontClient() {
                   {featured.map((p) => (
                     <div key={p.id} style={{ borderRadius: 14, overflow: "hidden", border: "1.5px solid #E8EDE8" }}>
                       <div style={{ height: 100, background: "#E8FFD0", overflow: "hidden" }}>
-                        {p.image && <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.target.style.display = "none"; }} />}
+                        {p.image && (
+                          <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            onError={(e) => { e.target.style.display = "none"; }} />
+                        )}
                       </div>
                       <div style={{ padding: "10px 12px" }}>
                         <div style={{ fontWeight: 700, fontSize: 12, color: "#0E2011", marginBottom: 3 }}>{p.name}</div>
@@ -359,7 +422,7 @@ export default function StorefrontClient() {
               )}
             </div>
 
-            {/* Store info preview */}
+            {/* Store info / footer preview */}
             <div style={{ background: "#0E2011", borderRadius: 16, padding: "20px", marginTop: 16, color: "#fff" }}>
               <div style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 16, color: "#A8FF3E", marginBottom: 12 }}>Footer Preview</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, fontSize: 13 }}>
@@ -383,4 +446,4 @@ export default function StorefrontClient() {
       </main>
     </div>
   );
-}
+}   

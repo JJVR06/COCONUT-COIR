@@ -16,6 +16,8 @@ function ls_remove(key) {
   try { localStorage.removeItem(key); } catch {}
 }
 
+// ── Single source of truth for default storefront values ─────────────────
+// StorefrontClient.js should import this instead of defining its own copy.
 export const DEFAULT_STOREFRONT = {
   heroTitle:        "Premium Philippine\nCoconut Coir Products",
   heroSubtitle:     "Eco-friendly, sustainably sourced from the Philippines.",
@@ -37,8 +39,8 @@ const DEFAULTS = {
   cart:             [],
   transactions:     [],
   wishlist:         [],
-  reviews:          {},     // { [productId]: review[] } — for buyer detail pages
-  allReviews:       [],     // flat array — for seller reviews dashboard
+  reviews:          {},     // { [String(productId)]: review[] } — buyer detail pages
+  allReviews:       [],     // flat array — seller reviews dashboard
   inventory:        [],
   inventoryLoaded:  false,
   storefront:       DEFAULT_STOREFRONT,
@@ -95,9 +97,8 @@ export function AppProvider({ children }) {
       ...p,
       user,
       sellerLoggedIn,
-      storefront: cachedSf,
-      // Pre-populate inventory from cache; inventoryLoaded stays false until DB confirms
-      inventory: cachedInventory,
+      storefront: { ...DEFAULT_STOREFRONT, ...cachedSf },
+      inventory:  cachedInventory,
     }));
     setHydrated(true);
   }, []);
@@ -155,7 +156,10 @@ export function AppProvider({ children }) {
     try {
       const res  = await fetch(`/api/wishlist?email=${encodeURIComponent(email)}`);
       const data = await res.json();
-      if (Array.isArray(data)) setState((p) => ({ ...p, wishlist: data }));
+      // Normalise all IDs to numbers for consistency
+      if (Array.isArray(data)) {
+        setState((p) => ({ ...p, wishlist: data.map(Number) }));
+      }
     } catch {}
   }, []);
 
@@ -212,15 +216,17 @@ export function AppProvider({ children }) {
     }, 30_000);
 
     // Also reload when the tab becomes visible again (user switches tabs)
-    const handleFocus = () => {
-      loadAllOrdersFromDB();
-      loadAllReviewsFromDB();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        loadAllOrdersFromDB();
+        loadAllReviewsFromDB();
+      }
     };
-    document.addEventListener("visibilitychange", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [hydrated, state.sellerLoggedIn, loadAllOrdersFromDB, loadAllReviewsFromDB]);
 
@@ -251,17 +257,27 @@ export function AppProvider({ children }) {
   }, []);
 
   // ── STOREFRONT ───────────────────────────────────────────────────────────
+  // FIX: This function now re-throws on failure so StorefrontClient
+  // can catch it and show the "Save Failed" error state correctly.
   const setStorefront = useCallback(async (sf) => {
+    // Always persist locally first so buyer pages update immediately
     ls_write("cc_storefront", sf);
     setState((p) => ({ ...p, storefront: sf }));
-    try {
-      await fetch("/api/storefront", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(sf),
-      });
-    } catch (err) {
-      console.error("Storefront save to DB failed:", err);
+
+    // Now attempt to save to DB — throws on failure so callers can handle it
+    const res = await fetch("/api/storefront", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(sf),
+    });
+
+    if (!res.ok) {
+      let message = "DB save failed";
+      try {
+        const data = await res.json();
+        if (data?.error) message = data.error;
+      } catch {}
+      throw new Error(message);
     }
   }, []);
 
@@ -286,9 +302,9 @@ export function AppProvider({ children }) {
     });
     if (email) {
       fetch("/api/cart", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, ...item }),
+        body:    JSON.stringify({ email, ...item }),
       }).catch(() => {});
     } else {
       ls_write("cc_cart", stateRef.current.cart);
@@ -300,9 +316,9 @@ export function AppProvider({ children }) {
     setState((p) => ({ ...p, cart: p.cart.filter((i) => i.id !== id) }));
     if (email) {
       fetch("/api/cart", {
-        method: "DELETE",
+        method:  "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, id }),
+        body:    JSON.stringify({ email, id }),
       }).catch(() => {});
     } else {
       ls_write("cc_cart", stateRef.current.cart);
@@ -319,9 +335,9 @@ export function AppProvider({ children }) {
     }));
     if (email) {
       fetch("/api/cart", {
-        method: "PATCH",
+        method:  "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, id, qty }),
+        body:    JSON.stringify({ email, id, qty }),
       }).catch(() => {});
     } else {
       ls_write("cc_cart", stateRef.current.cart);
@@ -334,9 +350,9 @@ export function AppProvider({ children }) {
     ls_remove("cc_cart");
     if (email) {
       fetch("/api/cart", {
-        method: "DELETE",
+        method:  "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, id: "all" }),
+        body:    JSON.stringify({ email, id: "all" }),
       }).catch(() => {});
     }
   }, []);
@@ -346,9 +362,9 @@ export function AppProvider({ children }) {
     const email = stateRef.current.user?.email || "";
     try {
       await fetch("/api/orders", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body:    JSON.stringify({
           id:         tx.id,
           user_email: email,
           items:      tx.items,
@@ -380,9 +396,9 @@ export function AppProvider({ children }) {
       ),
     }));
     fetch("/api/orders", {
-      method: "PATCH",
+      method:  "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: txId, status: "Received" }),
+      body:    JSON.stringify({ id: txId, status: "Received" }),
     }).catch(async () => {
       const email = stateRef.current.user?.email;
       if (email) await loadOrdersFromDB(email);
@@ -395,55 +411,61 @@ export function AppProvider({ children }) {
   }, [loadAllOrdersFromDB, loadAllReviewsFromDB]);
 
   // ── WISHLIST ─────────────────────────────────────────────────────────────
+  // FIX: All wishlist IDs are normalised to numbers to prevent
+  // duplicate entries from mixed string/number toggling.
   const toggleWishlist = useCallback(async (productId) => {
-    const email = stateRef.current.user?.email;
+    const email    = stateRef.current.user?.email;
+    const numId    = Number(productId);
     setState((p) => ({
       ...p,
-      wishlist: p.wishlist.includes(productId)
-        ? p.wishlist.filter((id) => id !== productId)
-        : [...p.wishlist, productId],
+      wishlist: p.wishlist.includes(numId)
+        ? p.wishlist.filter((id) => id !== numId)
+        : [...p.wishlist, numId],
     }));
     if (email) {
       fetch("/api/wishlist", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, productId }),
+        body:    JSON.stringify({ email, productId }),
       }).catch(() => {});
     }
   }, []);
 
+  // FIX: Always compare as numbers since wishlist is now normalised.
   const isWishlisted = useCallback(
-    (productId) =>
-      state.wishlist.includes(Number(productId)) ||
-      state.wishlist.includes(String(productId)),
+    (productId) => state.wishlist.includes(Number(productId)),
     [state.wishlist]
   );
 
   // ── REVIEWS ──────────────────────────────────────────────────────────────
+  // FIX: Always use String(productId) as the map key so that numeric
+  // product IDs from inventory and string IDs from useParams() both hit
+  // the same entry.
   const getProductReviews = useCallback(async (productId) => {
+    const key = String(productId);
     try {
       const res  = await fetch(`/api/reviews?productId=${productId}`);
       const data = await res.json();
       if (Array.isArray(data)) {
         const mapped = data.map(mapReview);
-        setState((p) => ({ ...p, reviews: { ...p.reviews, [productId]: mapped } }));
+        setState((p) => ({ ...p, reviews: { ...p.reviews, [key]: mapped } }));
         return mapped;
       }
     } catch {}
-    return stateRef.current.reviews[productId] || [];
+    return stateRef.current.reviews[key] || [];
   }, []);
 
   const getProductReviewsSync = useCallback(
-    (productId) => state.reviews[productId] || [],
+    (productId) => state.reviews[String(productId)] || [],
     [state.reviews]
   );
 
   const addReview = useCallback(async (review) => {
     try {
       await fetch("/api/reviews", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body:    JSON.stringify({
           productId:  review.productId,
           userEmail:  stateRef.current.user?.email || "",
           author:     review.author,

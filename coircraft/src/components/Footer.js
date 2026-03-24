@@ -1,10 +1,39 @@
 "use client";
 import Link from "next/link";
+import { useApp } from "@/context/AppContext";
 
 export default function Footer() {
-  const SHOP    = [{ href:"/store",label:"Store" },{ href:"/products",label:"All Products" },{ href:"/products?tag=New",label:"New Arrivals" },{ href:"/products?tag=Best Seller",label:"Best Sellers" }];
-  const ACCOUNT = [{ href:"/login",label:"Sign In" },{ href:"/register",label:"Register" },{ href:"/cart",label:"My Cart" },{ href:"/history",label:"My Orders" },{ href:"/profile",label:"My Profile" }];
-  const ABOUT   = [{ href:"/about",label:"About Us" },{ href:"/",label:"Sustainability" },{ href:"/",label:"Contact" },{ href:"/",label:"FAQ" }];
+  // FIX: Read live storefront data from context so seller edits (store name,
+  // tagline, address, hours, contact email/phone) are reflected here
+  // without a code change or redeploy.
+  const { storefront } = useApp();
+
+  const name    = storefront?.name         || "CoirCraft Philippines";
+  const tagline = storefront?.tagline      || "Premium eco-friendly coconut coir products made with love by Filipino artisans.";
+  const address = storefront?.address      || "123 Coir Avenue, Quezon City, Metro Manila";
+  const hours   = storefront?.hours        || "Mon–Sat: 8:00 AM – 6:00 PM";
+  const email   = storefront?.contactEmail || "InnoBytes@coircraft.ph";
+  const phone   = storefront?.contactPhone || "+63 912 345 6789";
+
+  const SHOP    = [
+    { href: "/store",                        label: "Store"        },
+    { href: "/products",                     label: "All Products" },
+    { href: "/products?tag=New",             label: "New Arrivals" },
+    { href: "/products?tag=Best Seller",     label: "Best Sellers" },
+  ];
+  const ACCOUNT = [
+    { href: "/login",    label: "Sign In"    },
+    { href: "/register", label: "Register"   },
+    { href: "/cart",     label: "My Cart"    },
+    { href: "/history",  label: "My Orders"  },
+    { href: "/profile",  label: "My Profile" },
+  ];
+  const ABOUT = [
+    { href: "/about", label: "About Us"     },
+    { href: "/",      label: "Sustainability" },
+    { href: "/",      label: "Contact"      },
+    { href: "/",      label: "FAQ"          },
+  ];
 
   return (
     <>
@@ -95,6 +124,17 @@ export default function Footer() {
           font-style: italic;
           margin-bottom: 0;
         }
+        /* Contact info block */
+        .footer-contact-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 7px;
+          color: rgba(255,255,255,0.45);
+          font-size: 12px;
+          line-height: 1.5;
+          margin-bottom: 7px;
+        }
+        .footer-contact-item:last-child { margin-bottom: 0; }
         /* Mobile bottom nav spacer */
         .footer-mobile-nav-spacer {
           height: 72px;
@@ -110,12 +150,15 @@ export default function Footer() {
 
           <div className="footer-grid">
 
-            {/* Brand */}
+            {/* ── Brand + Contact ── */}
             <div className="footer-brand">
+              {/* Logo row */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, justifyContent: "inherit" }}>
-                <div style={{ background: "linear-gradient(135deg,#A8FF3E,#1A472A)", borderRadius: 12, width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, transition: "transform 0.2s" }}
+                <div
+                  style={{ background: "linear-gradient(135deg,#A8FF3E,#1A472A)", borderRadius: 12, width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, transition: "transform 0.2s" }}
                   onMouseEnter={(e) => { e.currentTarget.style.transform = "rotate(-8deg) scale(1.1)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; }}>
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; }}
+                >
                   🥥
                 </div>
                 <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 20, color: "#fff" }}>
@@ -123,9 +166,48 @@ export default function Footer() {
                   <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 400, marginLeft: 4 }}>PH</span>
                 </span>
               </div>
+
+              {/* Tagline — live from storefront context */}
               <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 13, lineHeight: 1.8, marginBottom: 18, maxWidth: 240 }}>
-                Premium eco-friendly coconut coir products made with love by Filipino artisans. For your home, garden, and planet.
+                {tagline}
               </p>
+
+              {/* Contact details — live from storefront context */}
+              <div style={{ marginBottom: 18 }}>
+                {address && (
+                  <div className="footer-contact-item">
+                    <span style={{ flexShrink: 0, marginTop: 1 }}>📍</span>
+                    <span>{address}</span>
+                  </div>
+                )}
+                {hours && (
+                  <div className="footer-contact-item">
+                    <span style={{ flexShrink: 0, marginTop: 1 }}>🕐</span>
+                    <span>{hours}</span>
+                  </div>
+                )}
+                {email && (
+                  <div className="footer-contact-item">
+                    <span style={{ flexShrink: 0, marginTop: 1 }}>✉️</span>
+                    <a href={`mailto:${email}`} style={{ color: "inherit", textDecoration: "none", transition: "color 0.2s" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#A8FF3E")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "inherit")}>
+                      {email}
+                    </a>
+                  </div>
+                )}
+                {phone && (
+                  <div className="footer-contact-item">
+                    <span style={{ flexShrink: 0, marginTop: 1 }}>📞</span>
+                    <a href={`tel:${phone.replace(/\s/g, "")}`} style={{ color: "inherit", textDecoration: "none", transition: "color 0.2s" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "#A8FF3E")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "inherit")}>
+                      {phone}
+                    </a>
+                  </div>
+                )}
+              </div>
+
               <div className="footer-socials">
                 {["📘","📸","🐦"].map((icon, i) => (
                   <div key={i} className="footer-social-icon">{icon}</div>
@@ -140,7 +222,7 @@ export default function Footer() {
 
           {/* Bottom bar */}
           <div className="footer-bottom">
-            <p>© 2026 CoirCraft PH &nbsp;·&nbsp;
+            <p>© 2026 {name} &nbsp;·&nbsp;
               <strong style={{ color: "rgba(255,255,255,0.5)" }}>InnoBytes</strong>
             </p>
             <p>For educational purposes only, and no copyright infringement is intended.</p>

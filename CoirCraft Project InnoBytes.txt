@@ -1,0 +1,8 @@
+Project Website Homepage:https://coconut-coir.vercel.app/
+
+Project GitHub Repository: https://github.com/JJVR06/COCONUT-COIR
+
+Buyer Account: testbuyer@gmail.com
+Password: test123
+Seller Account: admin@gmail.com
+Password: seller123

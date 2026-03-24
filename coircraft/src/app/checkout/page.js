@@ -120,7 +120,7 @@ export default function CheckoutPage() {
     outline: "none", boxSizing: "border-box", background: "#fff",
   };
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
     const id = "TXN-" + Date.now();
     addTransaction({
       id,

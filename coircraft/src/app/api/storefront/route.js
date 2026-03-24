@@ -2,7 +2,6 @@ import { sql } from "@/lib/db";
 import { NextResponse } from "next/server";
 
 // Auto-creates the storefront_settings table + seeds one row on first request.
-// No manual migration needed — just deploy and use.
 async function ensureTable() {
   await sql`
     CREATE TABLE IF NOT EXISTS storefront_settings (
@@ -11,7 +10,7 @@ async function ensureTable() {
       updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
   `;
-  // Seed exactly one row (the single storefront config)
+  // Seed exactly one row — safe to call on every request
   await sql`
     INSERT INTO storefront_settings (id, data)
     VALUES (1, '{}')
@@ -26,7 +25,6 @@ export async function GET() {
     const rows = await sql`SELECT data FROM storefront_settings WHERE id = 1`;
     return NextResponse.json(rows[0]?.data ?? {});
   } catch (err) {
-    // Return empty object so the app falls back to DEFAULT_STOREFRONT
     console.error("Storefront GET error:", err.message);
     return NextResponse.json({});
   }
@@ -38,13 +36,22 @@ export async function POST(req) {
     await ensureTable();
     const data = await req.json();
 
+    // FIX: Use UPSERT (INSERT ... ON CONFLICT DO UPDATE) instead of plain UPDATE.
+    // If the seed row somehow doesn't exist, a plain UPDATE silently affects 0 rows
+    // and Neon may return an error depending on driver version. UPSERT guarantees
+    // the row is always written regardless of prior state.
     await sql`
-      UPDATE storefront_settings
-      SET data = ${JSON.stringify(data)}, updated_at = NOW()
-      WHERE id = 1
+      INSERT INTO storefront_settings (id, data, updated_at)
+      VALUES (1, ${JSON.stringify(data)}::jsonb, NOW())
+      ON CONFLICT (id)
+      DO UPDATE SET
+        data       = ${JSON.stringify(data)}::jsonb,
+        updated_at = NOW()
     `;
+
     return NextResponse.json({ success: true });
   } catch (err) {
+    console.error("Storefront POST error:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
